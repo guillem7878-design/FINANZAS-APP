@@ -4,6 +4,9 @@
 html, body{overscroll-behavior-y:none;}
 button, .tabbar, .tab, .tabplus, .scopechip, .walletcard, .chip, .pinkey, .switch{-webkit-user-select:none; user-select:none; -webkit-touch-callout:none;}
 #syncCard{display:none !important;}
+/* chat del asesor: sin saltos de línea dobles después de cada punto de lista */
+.bub .bl + br{display:none;}
+.bub .bl{margin:3px 0;}
 
 /* ---- pantalla de arranque ---- */
 .nv-splash{position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; pointer-events:none;
@@ -97,6 +100,11 @@ body.nv-covered .nv-cover{display:flex;}
 .nv-conn .hintx{font-size:12.5px; color:var(--ink3); margin-top:8px; line-height:1.45;}
 .nv-conn .hintx a{color:var(--accText, var(--gold));}
 .nv-conn .err{color:var(--rust); font-size:12.5px; margin-top:6px;}
+.nv-more{margin-top:10px;}
+.nv-more summary{font-size:13px; color:var(--ink2); cursor:pointer; list-style:none;}
+.nv-more summary::-webkit-details-marker{display:none;}
+.nv-more summary::before{content:'›'; display:inline-block; margin-right:6px; transition:transform .2s;}
+.nv-more[open] summary::before{transform:rotate(90deg);}
 .nv-keyset{display:flex; align-items:center; gap:10px; font-size:13.5px; color:var(--ink2);}
 .nv-keyset code{flex:1; background:var(--card2); border-radius:12px; padding:10px 12px; font-size:13px; color:var(--ink2);}
 

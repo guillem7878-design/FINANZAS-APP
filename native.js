@@ -35,6 +35,7 @@ function iosTick(){
 const PATTERNS = {select:[1,[8]], light:[1,[10]], medium:[1,[18]], success:[2,[12,70,18]], warning:[2,[22,90,22]], error:[3,[30,60,30,60,30]]};
 function haptic(kind){
   if(!on(K.haptics)) return;
+  if(navigator.userActivation && !navigator.userActivation.hasBeenActive) return;   // aún no se ha tocado la pantalla
   const [ticks, pattern] = PATTERNS[kind] || PATTERNS.light;
   if(!isIOS && navigator.vibrate){ try{ navigator.vibrate(pattern); }catch(e){} return; }
   if(!isIOS) return;
@@ -259,7 +260,7 @@ const downloadsShim = {
 /* ======================= Puente con la app ======================= */
 window.claude = {
   async use(name){
-    if(name==='sample') return lsGet(K.anth) ? sample : null;
+    if(name==='sample') return lsGet(K.anth) ? sample : (window.nvLocalAdvisor || null);   // sin clave: asesor integrado gratuito
     if(name==='mcp') return mcpShim;
     if(name==='downloads') return downloadsShim;
     return null;   // 'db' y 'user': sin nube, los datos viven en el dispositivo
@@ -458,12 +459,14 @@ function renderConnections(){
   const mask = k => k ? '••••' + k.slice(-4) : '';
   box.innerHTML = `
   <div class="nv-conn">
-    <div class="ch"><div><div class="n">Asesor IA y lectura de tickets</div><div class="s">Claude, con tu clave de Anthropic</div></div>
-      <span class="pill ${ak?'ok':'no'}">${ak?'Conectado':'Sin configurar'}</span></div>
-    ${ak ? `<div class="nv-keyset"><code>${mask(ak)}</code><button class="btn-link" onclick="nvRemoveKey('anth')" style="color:var(--rust)">Quitar</button></div>`
-         : `<div class="nv-keyrow"><input id="nvAnthKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-..."><button onclick="nvSaveKey('anth')">Guardar</button></div>
+    <div class="ch"><div><div class="n">Asesor financiero</div><div class="s">${ak ? 'Claude, con tu clave de Anthropic (de pago)' : 'Integrado · gratis, privado y sin internet'}</div></div>
+      <span class="pill ok">Activo</span></div>
+    ${ak ? `<div class="nv-keyset"><code>${mask(ak)}</code><button class="btn-link" onclick="nvRemoveKey('anth')" style="color:var(--rust)">Volver al gratuito</button></div>`
+         : `<div class="hintx" style="margin-top:0;">Analiza tus gastos, límites, deudas, colchón y metas directamente en el iPhone. No envía tus datos a ningún sitio.</div>
+            <details class="nv-more"><summary>Opcional: usar Claude (de pago, con chat libre y lectura de tickets)</summary>
+            <div class="nv-keyrow" style="margin-top:10px;"><input id="nvAnthKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-..."><button onclick="nvSaveKey('anth')">Guardar</button></div>
             <div class="err" id="nvAnthErr"></div>
-            <div class="hintx">Créala en <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> › API Keys. Se guarda solo en este iPhone y solo se envía a Anthropic. Cada consulta se cobra en tu cuenta de Anthropic (unos céntimos).</div>`}
+            <div class="hintx">Requiere una clave de <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> con saldo: la API se paga aparte de tu suscripción de Claude (unos céntimos por consulta).</div></details>`}
   </div>
   <div class="nv-conn">
     <div class="ch"><div><div class="n">Precios de bolsa</div><div class="s">Alpha Vantage · clave gratuita, 25 consultas al día</div></div>
@@ -500,7 +503,7 @@ window.nvSaveKey = async function(which){
   }
 };
 window.nvRemoveKey = function(which){
-  if(!confirm(which==='anth' ? '¿Quitar la clave de Anthropic de este iPhone?' : '¿Quitar la clave de Alpha Vantage?')) return;
+  if(!confirm(which==='anth' ? '¿Quitar la clave de Anthropic y volver al asesor gratuito integrado?' : '¿Quitar la clave de Alpha Vantage?')) return;
   lsSet(which==='anth'?K.anth:K.av, null); haptic('warning'); location.reload();
 };
 

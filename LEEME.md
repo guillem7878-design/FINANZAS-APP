@@ -33,7 +33,8 @@ Tu app de finanzas como app instalable (PWA): pantalla completa, icono propio, f
 ## Primera configuración (en la app: Más › Ajustes)
 
 - **Conexiones**
-  - *Asesor IA y lectura de tickets*: pega una clave de <https://console.anthropic.com/settings/keys>. Usa Claude Opus 5.5; cada consulta se cobra en tu cuenta de Anthropic (unos céntimos). Tiene activado el respaldo automático de modelo: si Claude declinara una consulta, la API la reintenta con otro modelo.
+  - *Asesor financiero*: viene **integrado y es gratis**. Analiza tus datos en el propio iPhone, sin internet, y no envía nada a ningún sitio. Responde sobre el mes, gastos fuera de lo normal, deudas, ahorro para tu meta, suscripciones, colchón, límites e inversiones, y crea un plan con «Analizar mis finanzas».
+    - Opcional y de pago: si algún día quieres chat libre y lectura de tickets con Claude, pega una clave de <https://console.anthropic.com/settings/keys>. La API se paga aparte de la suscripción de Claude (unos céntimos por consulta).
   - *Precios de bolsa*: clave gratuita de <https://www.alphavantage.co/support/#api-key> (25 consultas al día).
   - *Cripto y divisas*: funcionan solas (Crypto.com y Banco Central Europeo).
 - **Avisos y vibración**: activa **Notificaciones del sistema** (solo funciona con la app ya instalada; requiere iOS 16.4 o posterior).

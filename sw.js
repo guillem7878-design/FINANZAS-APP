@@ -1,6 +1,6 @@
 /* Finanzas · service worker: funciona sin conexión y muestra notificaciones */
-const VERSION = 'finanzas-v1';
-const SHELL = ['./', 'index.html', 'native.js', 'native.css', 'manifest.webmanifest',
+const VERSION = 'finanzas-v2';
+const SHELL = ['./', 'index.html', 'native.js', 'asesor.js', 'native.css', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 // Recursos de terceros que sí conviene guardar (SDK de Anthropic y tipografía)
 const RUNTIME_HOSTS = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];

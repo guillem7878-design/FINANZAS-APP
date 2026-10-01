@@ -15,6 +15,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="format-detection" content="telephone=no">
 <link rel="stylesheet" href="native.css">
+<script src="asesor.js"></script>
 <script src="native.js"></script>
 <style>
 :root{
@@ -1459,7 +1460,7 @@ body.privacy .dn-amt{display:none;} body.privacy .dn-mask{display:inline;}
         <button id="advSend" onclick="sendAdvisor()" aria-label="Enviar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
       </div>
       <div class="advtip" id="advTip"></div>
-      <div class="hint" style="text-align:center;margin-top:14px;">Orientación educativa basada en tus datos, no asesoramiento financiero profesional. No recomienda comprar ni vender valores concretos. Cada consulta usa tu clave de Anthropic.</div>
+      <div class="hint" style="text-align:center;margin-top:14px;">Orientación educativa basada en tus datos, no asesoramiento financiero profesional. No recomienda comprar ni vender valores concretos.</div>
     </div>
 
     <div class="subview" id="sub-metas">
@@ -4009,7 +4010,7 @@ function renderAdvisorTeaser(){
   } else {
     box.innerHTML = `<div class="card advteaser tap" onclick="goToTab('mas','asesor')">
       <div class="adv-badge sm">✦</div>
-      <div class="at-body"><div class="at-k">Asesor IA</div><div class="at-t">Descubre cómo llegar antes a tu meta</div><div class="at-s">Analiza tus gastos, deudas y ritmo de ahorro reales</div></div>
+      <div class="at-body"><div class="at-k">Tu asesor</div><div class="at-t">Descubre cómo llegar antes a tu meta</div><div class="at-s">Analiza tus gastos, deudas y ritmo de ahorro reales</div></div>
       <span class="at-arrow">›</span></div>`;
   }
 }
