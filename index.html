@@ -407,11 +407,12 @@ h1.title{font-size:32px; font-weight:700; letter-spacing:-0.035em; margin:4px 0 
 .pillrow button{padding:7px 13px;}
 .pillrow button.sel{color:#171512;}
 
-/* menú inferior flotante con "+" central */
-.tabbar{left:50%; right:auto; transform:translateX(-50%); bottom:calc(14px + env(safe-area-inset-bottom,0px));
-  width:calc(100% - 24px); max-width:496px; grid-template-columns:repeat(5,1fr); padding:6px; border-radius:28px;
-  border:1px solid var(--tabbarborder); box-shadow:0 18px 40px -14px rgba(0,0,0,.65);}
-.tab-indicator{top:6px; bottom:6px; height:auto; left:6px; width:calc((100% - 12px) / 5); border-radius:24px; background:rgba(216,185,120,.15);}
+/* menú inferior pegado al borde con "+" central */
+.tabbar{--tbpad:max(8px, calc(env(safe-area-inset-bottom,0px) - 12px));
+  left:0; right:0; bottom:0; transform:none; width:100%; max-width:none;
+  grid-template-columns:repeat(5,1fr); padding:6px max(10px, calc((100% - 500px) / 2)) var(--tbpad); border-radius:24px 24px 0 0;
+  border:none; border-top:1px solid var(--tabbarborder); box-shadow:0 -10px 30px -18px rgba(0,0,0,.45);}
+.tab-indicator{top:6px; bottom:var(--tbpad); height:auto; left:max(10px, calc((100% - 500px) / 2)); width:calc((100% - 2 * max(10px, calc((100% - 500px) / 2))) / 5); border-radius:20px; background:rgba(216,185,120,.15);}
 .tab{font-size:10.5px; padding:8px 2px; gap:3px;}
 .tab svg{width:22px; height:22px;}
 .tabplus{justify-self:center; width:56px; height:56px; border-radius:20px; border:none; margin-top:-24px; position:relative; z-index:2;
@@ -1285,6 +1286,28 @@ body.privacy .dn-amt{display:none;} body.privacy .dn-mask{display:inline;}
 .sl-n{flex:1; min-width:0; font-weight:500;}
 .sl-v{font-weight:600;}
 .sl-p{width:3.2em; text-align:right; color:var(--ink2); font-size:13px;}
+/* futuros */
+.futcard{padding:18px;}
+.fut-top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+.fut-k{font-size:12.5px; font-weight:600; color:var(--ink2); text-transform:uppercase; letter-spacing:.05em;}
+.fut-big{font-size:30px; font-weight:700; letter-spacing:-0.03em; margin-top:4px;}
+.fut-big.fpos, .fut-mv b.fpos{color:var(--sage);} .fut-big.fneg, .fut-mv b.fneg{color:var(--rust);}
+.fut-tag{font-size:11.5px; font-weight:600; padding:5px 10px; border-radius:999px; background:var(--card2); color:var(--ink2); white-space:nowrap;}
+.fut-stats{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0;}
+.fut-stats div{background:var(--card2); border-radius:14px; padding:10px 12px; display:flex; flex-direction:column; gap:3px;}
+.fut-stats span{font-size:12px; color:var(--ink2);} .fut-stats b{font-size:16px;}
+.fut-bal{display:flex; flex-direction:column; gap:6px; font-size:12.5px; font-weight:600; color:var(--ink2); margin:0 0 14px;}
+.fut-bal input{min-height:44px; border-radius:var(--r-sm); border:1px solid var(--hair); background:var(--card2); color:var(--ink); padding:0 12px; font-size:16px;}
+.fut-btns{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+.fut-btns .btn{padding:0 8px; font-size:14px;}
+.fut-form{margin-top:14px;}
+.fut-moves{margin-top:14px; border-top:1px solid var(--hair);}
+.fut-mv{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--hair);}
+.fut-mv:last-child{border-bottom:none;}
+.fut-ic{width:30px; height:30px; flex:none; border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:700; background:var(--card2);}
+.fut-ic.in{color:var(--rust);} .fut-ic.out{color:var(--sage);}
+.fut-mi{flex:1; min-width:0; font-size:14px;} .fut-mi small{display:block; color:var(--ink3); font-size:12px; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.fut-mv b{font-size:14px;}
 </style>
 </head>
 <body>
@@ -1706,6 +1729,8 @@ function normalizeState(s){
   if(!s.budgets || typeof s.budgets!=='object') s.budgets={};
   if(!Array.isArray(s.categories) || !s.categories.length) s.categories = DEFAULT_CATS.map(c=>({...c}));
   if(!Array.isArray(s.portfolios)) s.portfolios = [];
+  if(!s.futures || typeof s.futures!=='object') s.futures = {moves:[], balance:null};
+  if(!Array.isArray(s.futures.moves)) s.futures.moves = [];
   s.items.forEach(i=>{ if(i.cat==='prestamos') i.cat='medeben'; });
   if(s.categories.some(c=>c.id==='prestamos')){
     s.categories = s.categories.filter(c=>c.id!=='prestamos');
@@ -3181,6 +3206,7 @@ function pfOverviewHtml(cat, pfs){
       ${list.length?`<div class="pf-bar">${bar}</div>`:''}
     </button>`; }).join('');
   html += `<div class="newpf"><input type="text" id="pfname_${cat}" maxlength="30" placeholder="Nombre de la nueva cartera" onkeydown="if(event.key==='Enter')createPortfolio('${cat}')"><button class="btn btn-pri" onclick="createPortfolio('${cat}')">Crear</button></div>`;
+  if(cat==='crypto') html += futuresHtml();
   return html;
 }
 const CRYPTO_NAMES = {BTC:'Bitcoin',ETH:'Ethereum',SOL:'Solana',XRP:'XRP',ADA:'Cardano',DOGE:'Dogecoin',DOT:'Polkadot',AVAX:'Avalanche',LINK:'Chainlink',MATIC:'Polygon',POL:'Polygon',LTC:'Litecoin',BNB:'BNB',TRX:'TRON',SHIB:'Shiba Inu',ATOM:'Cosmos',XLM:'Stellar',NEAR:'NEAR',UNI:'Uniswap',APT:'Aptos',ARB:'Arbitrum',OP:'Optimism',SUI:'Sui',PEPE:'Pepe',CRO:'Cronos',USDT:'Tether',USDC:'USD Coin',TON:'Toncoin',HBAR:'Hedera',ALGO:'Algorand',ICP:'Internet Computer',FIL:'Filecoin',AAVE:'Aave',INJ:'Injective',RNDR:'Render',RENDER:'Render',SEI:'Sei',TIA:'Celestia',KAS:'Kaspa',BCH:'Bitcoin Cash',ETC:'Ethereum Classic',XMR:'Monero'};
@@ -3404,6 +3430,85 @@ function investSell(cat, pos, qty, price, accId, fee){
   else if(cat==='crypto'){ if(pos.lastPrice>0) pos.amount = pos.lastPrice*pos.qty; } else recalcStock(pos);
 }
 const round8 = n => Math.round(n*1e8)/1e8;
+
+/* ---- Futuros: el dinero enviado cuenta como perdido; solo vuelve al patrimonio al retirarlo a spot ---- */
+const futUI = {mode:null, err:''};
+function futState(){ if(!state.futures) state.futures = {moves:[], balance:null}; return state.futures; }
+function futTotals(){ const m = futState().moves; const sent = m.filter(x=>x.dir==='in').reduce((a,x)=>a+x.usd,0), back = m.filter(x=>x.dir==='out').reduce((a,x)=>a+x.usd,0); return {sent, back, net: back-sent}; }
+function futMode(m){ futUI.mode = futUI.mode===m ? null : m; futUI.err=''; renderInvestPage('crypto'); }
+function futFail(msg){ futUI.err = msg; renderInvestPage('crypto'); }
+function futSourceOptions(){
+  const spot = state.items.filter(i=>i.cat==='crypto' && toUSD(i)>0);
+  return `<option value="">No descontar (ya estaba en futuros)</option>`
+    + (spot.length ? `<optgroup label="Spot (crypto)">${spot.map(i=>`<option value="pos:${i.id}">${esc(invLabel(i.portfolioId, i.symbol||i.name))} · ${fmtUSD(toUSD(i))}</option>`).join('')}</optgroup>` : '')
+    + (liquidAccounts().length ? `<optgroup label="Cuentas">${liquidAccounts().map(a=>`<option value="acc:${a.id}">${esc(a.name)}</option>`).join('')}</optgroup>` : '');
+}
+function futSend(){
+  const usd = round2(numVal('fut_amt')), src = strVal('fut_src');
+  if(!(usd>0)) return futFail('Indica un importe mayor que 0.');
+  let label = 'Sin descontar';
+  if(src.startsWith('pos:')){
+    const pos = state.items.find(i=>i.id===src.slice(4)); if(!pos) return futFail('Esa posición ya no existe.');
+    if(usd > toUSD(pos) + 0.005) return futFail(`En ${pos.symbol||pos.name} solo tienes ${fmtUSD(toUSD(pos))}.`);
+    if(pos.live && pos.qty>0){
+      if(!(pos.lastPrice>0)) return futFail('Esa posición aún no tiene precio. Espera a que se actualice o elige otra.');
+      pos.qty = round8(pos.qty - usd/pos.lastPrice);
+      if(pos.qty<=1e-8) state.items = state.items.filter(i=>i.id!==pos.id); else pos.amount = pos.lastPrice*pos.qty;
+    } else {
+      pos.amount = round2(Number(pos.amount||0) - (pos.currency==='USD' ? usd : usd*fxRate()));
+      if(pos.amount<=0.004) state.items = state.items.filter(i=>i.id!==pos.id);
+    }
+    label = 'Desde '+invLabel(pos.portfolioId, pos.symbol||pos.name);
+  } else if(src.startsWith('acc:')){
+    const acc = state.items.find(i=>i.id===src.slice(4)); if(!acc) return futFail('Esa cuenta ya no existe.');
+    adjustItem(acc.id, -round2(usd*fxRate()));
+    label = 'Desde '+acc.name;
+  }
+  const F = futState();
+  F.moves.push({id:uid(), ts:Date.now(), date:todayStr(), dir:'in', usd, label});
+  if(F.balance!==null) F.balance = round2(F.balance + usd);
+  futUI.mode=null; futUI.err=''; save(); renderAll();
+}
+function futWithdraw(){
+  const usd = round2(numVal('fut_amt'));
+  if(!(usd>0)) return futFail('Indica un importe mayor que 0.');
+  let pid = strVal('fut_pf');
+  if(!pid || !portfoliosOf('crypto').some(p=>p.id===pid)){
+    const p = {id:uid(), cat:'crypto', name:'Spot', created:todayStr()};
+    state.portfolios.push(p); pid = p.id;
+  }
+  const pos = investBuy('crypto', pid, {symbol:'USDT', qty:usd, price:1});
+  if(!(pos.lastPrice>0)) pos.amount = pos.qty;
+  const F = futState();
+  F.moves.push({id:uid(), ts:Date.now(), date:todayStr(), dir:'out', usd, label:'A '+invLabel(pid, 'USDT')});
+  if(F.balance!==null) F.balance = Math.max(0, round2(F.balance - usd));
+  futUI.mode=null; futUI.err=''; save(); renderAll();
+}
+function futSetBalance(v){
+  const n = parseFloat(String(v).replace(',','.'));
+  futState().balance = String(v).trim()==='' || !(n>=0) ? null : round2(n);
+  save(); renderInvestPage('crypto');
+}
+function futuresHtml(){
+  const F = futState(), T = futTotals(), pfs = portfoliosOf('crypto');
+  let html = `<div class="group-title">Futuros</div><div class="card futcard">
+    <div class="fut-top"><div><div class="fut-k">Resultado</div>
+      <div class="fut-big mono ${T.net>0?'fpos':T.net<0?'fneg':''}">${T.net>0?'+':T.net<0?'−':''}${fmtUSD(Math.abs(T.net))}</div></div>
+      <div class="fut-tag">No suma al patrimonio</div></div>
+    <div class="fut-stats"><div><span>Enviado</span><b class="mono">${fmtUSD(T.sent)}</b></div><div><span>Retirado a spot</span><b class="mono">${fmtUSD(T.back)}</b></div></div>
+    <label class="fut-bal">Saldo actual en futuros ($) · solo informativo<input type="number" step="any" inputmode="decimal" placeholder="Opcional" value="${F.balance===null?'':F.balance}" onchange="futSetBalance(this.value)"></label>
+    <div class="fut-btns"><button class="btn ${futUI.mode==='in'?'btn-pri':'btn-sec'}" onclick="futMode('in')">↓ Enviar a futuros</button><button class="btn ${futUI.mode==='out'?'btn-pri':'btn-sec'}" onclick="futMode('out')">↑ Retirar a spot</button></div>`;
+  if(futUI.mode==='in') html += `<div class="fut-form"><div class="hint" style="margin:0 0 12px;">El dinero que envíes se da por perdido: sale de tu patrimonio en cuanto lo envías.</div>
+      <div class="addrow2"><label>Importe ($)<input type="number" step="any" inputmode="decimal" id="fut_amt" placeholder="0"></label><label>Desde<select id="fut_src">${futSourceOptions()}</select></label></div>
+      <button class="btn btn-pri btn-block" onclick="futSend()">Enviar a futuros</button></div>`;
+  if(futUI.mode==='out') html += `<div class="fut-form"><div class="hint" style="margin:0 0 12px;">Lo que retires entra en spot como USDT y vuelve a contar en tu patrimonio.</div>
+      <div class="addrow2"><label>Importe ($)<input type="number" step="any" inputmode="decimal" id="fut_amt" placeholder="0"></label><label>A la cartera<select id="fut_pf">${pfs.length ? pfs.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('') : '<option value="">Nueva cartera «Spot»</option>'}</select></label></div>
+      <button class="btn btn-pri btn-block" onclick="futWithdraw()">Retirar a spot</button></div>`;
+  if(futUI.err) html += `<div class="pferr">${esc(futUI.err)}</div>`;
+  const moves = F.moves.slice().sort((a,b)=>b.ts-a.ts).slice(0,8);
+  if(moves.length) html += `<div class="fut-moves">${moves.map(m=>`<div class="fut-mv"><span class="fut-ic ${m.dir}">${m.dir==='in'?'↓':'↑'}</span><div class="fut-mi"><div>${m.dir==='in'?'Enviado a futuros':'Retirado a spot'}</div><small>${esc(fmtDay(m.date))} · ${esc(m.label||'')}</small></div><b class="mono ${m.dir==='in'?'fneg':'fpos'}">${m.dir==='in'?'−':'+'}${fmtUSD(m.usd)}</b></div>`).join('')}</div>`;
+  return html + `</div>`;
+}
 function numVal(id){ const el=document.getElementById(id); return el ? parseFloat(String(el.value).replace(',','.')) : NaN; }
 function strVal(id){ const el=document.getElementById(id); return el ? String(el.value||'') : ''; }
 function linkQuote(id){
@@ -4472,7 +4577,7 @@ function makeUndoable(name, label, ms){
     return r;
   };
 }
-[['deleteMovement','Movimiento eliminado'],['removeItem', id=>{ const it=state.items.find(i=>i.id===id); return it && (it.cat==='bolsa'||it.cat==='crypto') ? 'Posición eliminada' : 'Cuenta eliminada'; }],['deletePortfolio','Cartera eliminada'],['payDebt',(id,a)=>{ const it=state.items.find(i=>i.id===id); return it && Number(a)>=Number(it.amount)-0.004 ? 'Deuda saldada 🎉' : 'Pago registrado'; }],['collectPart',(id,a)=>{ const it=state.items.find(i=>i.id===id); return it && Number(a)>=Number(it.amount)-0.004 ? 'Marcado como cobrado' : 'Cobro parcial registrado'; }],['sellPos','Venta registrada'],['deleteCustomScope','Ámbito eliminado'],
+[['deleteMovement','Movimiento eliminado'],['removeItem', id=>{ const it=state.items.find(i=>i.id===id); return it && (it.cat==='bolsa'||it.cat==='crypto') ? 'Posición eliminada' : 'Cuenta eliminada'; }],['deletePortfolio','Cartera eliminada'],['payDebt',(id,a)=>{ const it=state.items.find(i=>i.id===id); return it && Number(a)>=Number(it.amount)-0.004 ? 'Deuda saldada 🎉' : 'Pago registrado'; }],['collectPart',(id,a)=>{ const it=state.items.find(i=>i.id===id); return it && Number(a)>=Number(it.amount)-0.004 ? 'Marcado como cobrado' : 'Cobro parcial registrado'; }],['sellPos','Venta registrada'],['futSend','Enviado a futuros'],['futWithdraw','Retirado a spot'],['deleteCustomScope','Ámbito eliminado'],
  ['deleteRecurring','Recurrente eliminado'],['deleteSavingsGoal','Meta de ahorro eliminada'],['deleteSnapshot','Foto de patrimonio eliminada'],
  ['collectDebt','Marcado como cobrado'],['resetAll','Todos los datos borrados',10000]].forEach(([n,l,ms])=>makeUndoable(n,l,ms));
 

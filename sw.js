@@ -1,5 +1,5 @@
 /* Finanzas · service worker: funciona sin conexión y muestra notificaciones */
-const VERSION = 'finanzas-v2';
+const VERSION = 'finanzas-v3';
 const SHELL = ['./', 'index.html', 'native.js', 'asesor.js', 'native.css', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 // Recursos de terceros que sí conviene guardar (SDK de Anthropic y tipografía)

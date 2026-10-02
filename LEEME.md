@@ -47,6 +47,7 @@ Tu app de finanzas como app instalable (PWA): pantalla completa, icono propio, f
 | **Vibración** | Toque suave en cada botón, doble toque al guardar, triple al fallar el PIN (iPhone con iOS 18 o posterior). |
 | **Animaciones** | Pantalla de arranque, iconos que rebotan, confirmación animada al guardar, avisos que caen desde arriba, confeti al alcanzar metas o saldar deudas, PIN que tiembla. |
 | **Avisos** | Límite de gasto al 80 % y al 100 %, meta de patrimonio o de ahorro alcanzada, cobros que vencen hoy o están vencidos, recurrentes del mes registrados, recordatorio de copia de seguridad cada 30 días y recordatorio nocturno si no has apuntado nada. |
+| **Futuros** | En *Cartera › Crypto*, al final. El dinero que envías a futuros se da por perdido y deja de contar en tu patrimonio. Solo vuelve cuando lo retiras a spot: entra como USDT en la cartera crypto que elijas y se vuelve a contabilizar. Muestra lo enviado, lo retirado y tu resultado neto. |
 | **Icono** | El icono muestra un número con lo que requiere atención (límites superados y cobros vencidos). |
 
 Limitación de iOS: sin un servidor, las notificaciones solo se generan mientras la app está abierta o al abrirla, no a una hora fija con la app cerrada.
