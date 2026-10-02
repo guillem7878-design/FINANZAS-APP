@@ -407,11 +407,12 @@ h1.title{font-size:32px; font-weight:700; letter-spacing:-0.035em; margin:4px 0 
 .pillrow button{padding:7px 13px;}
 .pillrow button.sel{color:#171512;}
 
-/* menú inferior flotante con "+" central */
-.tabbar{left:50%; right:auto; transform:translateX(-50%); bottom:calc(14px + env(safe-area-inset-bottom,0px));
-  width:calc(100% - 24px); max-width:496px; grid-template-columns:repeat(5,1fr); padding:6px; border-radius:28px;
-  border:1px solid var(--tabbarborder); box-shadow:0 18px 40px -14px rgba(0,0,0,.65);}
-.tab-indicator{top:6px; bottom:6px; height:auto; left:6px; width:calc((100% - 12px) / 5); border-radius:24px; background:rgba(216,185,120,.15);}
+/* menú inferior pegado al borde con "+" central */
+.tabbar{--tbpad:max(8px, calc(env(safe-area-inset-bottom,0px) - 12px));
+  left:0; right:0; bottom:0; transform:none; width:100%; max-width:none;
+  grid-template-columns:repeat(5,1fr); padding:6px max(10px, calc((100% - 500px) / 2)) var(--tbpad); border-radius:24px 24px 0 0;
+  border:none; border-top:1px solid var(--tabbarborder); box-shadow:0 -10px 30px -18px rgba(0,0,0,.45);}
+.tab-indicator{top:6px; bottom:var(--tbpad); height:auto; left:max(10px, calc((100% - 500px) / 2)); width:calc((100% - 2 * max(10px, calc((100% - 500px) / 2))) / 5); border-radius:20px; background:rgba(216,185,120,.15);}
 .tab{font-size:10.5px; padding:8px 2px; gap:3px;}
 .tab svg{width:22px; height:22px;}
 .tabplus{justify-self:center; width:56px; height:56px; border-radius:20px; border:none; margin-top:-24px; position:relative; z-index:2;
@@ -1544,14 +1545,6 @@ body.privacy .dn-amt{display:none;} body.privacy .dn-mask{display:inline;}
   </div>
   </div>
   <div class="sheet-scroll">
-  <div id="scanBlock" style="display:none;">
-    <button class="scanbtn" id="scanBtn" onclick="document.getElementById('scanFile').click()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
-      <span id="scanBtnTxt">Escanear ticket</span>
-    </button>
-    <input type="file" id="scanFile" accept="image/*" capture="environment" hidden onchange="scanTicket(this.files[0]); this.value='';">
-    <div class="scanstatus" id="scanStatus"></div>
-  </div>
   <div class="amtwrap"><span class="amtcur">€</span><input type="number" id="sheetAmount" class="amtinput mono" placeholder="0" inputmode="decimal" step="0.01" oninput="sizeAmt()"></div>
   <div class="daterow">
     <button class="datechip" id="dateToday" onclick="setSheetDate(0)">Hoy</button>
@@ -2388,8 +2381,6 @@ function openEditMovement(kind, id){
   openSheetUI();
 }
 function closeExpenseSheet(){
-  if(typeof scanCtl!=='undefined' && scanCtl){ try{ scanCtl.abort(); }catch(e){} }
-  const ss=document.getElementById('scanStatus'); if(ss) ss.innerHTML='';
   document.getElementById('sheetBackdrop').classList.remove('show');
   document.getElementById('expenseSheet').classList.remove('show');
   document.body.style.overflow='';
@@ -2421,7 +2412,6 @@ function setSheetType(type){
   document.getElementById('recLabel').style.display = (type==='owed'||editing) ? 'none' : '';
   document.getElementById('sheetNote').placeholder = type==='owed' ? 'Concepto o servicio (p. ej. clases, diseño web…)' : 'Nota (opcional)';
   document.getElementById('toBlock').style.display = type==='transfer' ? '' : 'none';
-  updateScanBlock();
   document.getElementById('scopeLabel').textContent = type==='income' ? 'Origen' : 'Ámbito';
   document.getElementById('accountLabel').textContent = type==='income' ? 'Cuenta de destino' : type==='transfer' ? 'Desde' : 'Pagado con';
   const btn = document.getElementById('sheetSubmitBtn');
@@ -3168,7 +3158,6 @@ function pfOverviewHtml(cat, pfs){
     <div class="cathero-amt mono">${fmtD(S.value,cat)}</div>
     <div class="cathero-sub">${pfs.length} ${pfs.length===1?'cartera':'carteras'} · ${nPos} ${nPos===1?'posición':'posiciones'}${cat==='crypto'?' · ≈ '+fmt(catTotal('crypto')):''}${S.gain!==null?' · '+(S.gain>=0?'+':'−')+fmtD(Math.abs(S.gain),cat):''}</div>
   </div>` + stockStatusHtml(cat);
-  html += photoBlockHtml(cat, null);
   html += `<div class="group-title">Tus carteras</div>`;
   if(!pfs.length) html += `<div class="pfempty">Crea una cartera para cada bróker o estrategia (por ejemplo <b>${cat==='crypto'?'Binance':'XTB'}</b> o <b>Largo plazo</b>) y añade tus posiciones dentro.</div>`;
   html += pfs.map(p=>{
@@ -3256,7 +3245,6 @@ function pfDetailHtml(cat, p){
     const tot = list.reduce((a,i)=>a+Math.max(0,dispVal(i,cat)),0)||1;
     html += `<div class="pf-bar big">${list.map(i=>`<i style="width:${Math.max(1.5,dispVal(i,cat)/tot*100)}%;background:${monoColor(i.symbol||i.name)}" title="${esc(i.symbol||i.name)}"></i>`).join('')}</div>`;
   }
-  html += photoBlockHtml(cat, p);
   html += `<div class="group-title">Posiciones</div>` + (list.length ? list.map(it=>posRowHtml(cat,it)).join('') : `<div class="pfempty">Todavía no hay posiciones en esta cartera.</div>`);
   // añadir
   html += `<div class="group-title">Añadir posición</div><div class="card addpos">`;
@@ -3288,36 +3276,6 @@ function pfDetailHtml(cat, p){
   return html;
 }
 
-function photoBlockHtml(cat, p){
-  const U = pfUI[cat];
-  const can = !!(ticketLimits && sampleNS);
-  const where = cat==='crypto' ? 'Binance, Coinbase o tu exchange' : 'XTB, Trade Republic o tu bróker';
-  return `<div class="card photocard${p && positionsOf(p.id).length ? ' compact' : ''}">
-    <button class="photobtn" ${can && !U.impBusy ? `onclick="document.getElementById('impfile_${cat}').click()"` : 'disabled'}>
-      <span class="pb-ic">${U.impBusy ? '<span class="spin"></span>' : iconSvg('camera')}</span>
-      <span class="pb-t"><b>${U.impBusy ? 'Leyendo la captura…' : (p ? 'Añadir desde una foto' : 'Replicar cartera desde foto')}</b>
-      <small>${can ? `Captura de ${where}: la copio y la revisas antes de guardar` : 'Necesita que la app pueda enviar imágenes a Claude, y ahora mismo no está disponible en tu cuenta o en este navegador.'}</small></span>
-    </button>
-    ${can ? `<input type="file" id="impfile_${cat}" accept="${(ticketLimits.mediaTypes||['image/*']).join(',')}" hidden onchange="importPortfolioPhoto('${cat}', this.files[0]); this.value='';">` : ''}
-    ${U.impErr?`<div class="pferr">${U.impErr}</div>`:''}
-    ${U.imp ? importPreviewHtml(cat, p) : ''}
-  </div>`;
-}
-function importPreviewHtml(cat, p){
-  const rows = pfUI[cat].imp; const n = rows.filter(r=>r.on).length;
-  return `<div class="imp-h">He encontrado ${rows.length} ${rows.length===1?'posición':'posiciones'}. Revisa y corrige lo que haga falta:</div>
-    ${rows.map((r,i)=>`<div class="improw${r.on?'':' off'}">
-      <input type="checkbox" ${r.on?'checked':''} aria-label="Incluir ${esc(r.sym)}" onchange="pfUI.${cat}.imp[${i}].on=this.checked; renderInvestPage('${cat}')">
-      ${tkBadge(r.sym)}
-      <div class="imp-f"><input type="text" value="${esc(r.sym||'')}" placeholder="${esc((r.name||'').slice(0,26)) || 'Ticker'}" aria-label="Ticker" onchange="pfUI.${cat}.imp[${i}].sym=this.value.trim().toUpperCase()"><div class="imp-n">${esc(r.name||'')}${r.cur?' · '+esc(r.cur):''}</div></div>
-      ${r.qty>0 || !r.val ? `<div class="imp-q"><input type="number" step="any" value="${r.qty||''}" aria-label="Cantidad" onchange="pfUI.${cat}.imp[${i}].qty=parseFloat(this.value)||0"><div class="imp-n">${r.avg?'medio '+fmtNum(r.avg):'títulos'}</div></div>` : `<div class="imp-q imp-val"><b class="mono">${cat==='crypto'?fmtUSD(r.val):EUR_2.format(r.val)}</b><div class="imp-n ${r.pl<0?'neg':r.pl>0?'pos':''}">${r.pl!==null&&isFinite(r.pl)?(r.pl>=0?'+':'')+NF({minimumFractionDigits:2,maximumFractionDigits:2}).format(r.pl):'importe'}</div></div>`}
-    </div>`).join('')}
-    ${p ? '' : `<div class="imp-dest"><label>Guardar en<select id="impdest_${cat}" onchange="pfUI.${cat}.dest=this.value; renderInvestPage('${cat}')">
-        <option value="new" ${(pfUI[cat].dest||'new')==='new'?'selected':''}>Nueva cartera</option>
-        ${portfoliosOf(cat).map(x=>`<option value="${x.id}" ${pfUI[cat].dest===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
-      ${(pfUI[cat].dest||'new')==='new' ? `<label>Nombre<input type="text" id="impname_${cat}" maxlength="30" value="${esc(pfUI[cat].impName||'')}" oninput="pfUI.${cat}.impName=this.value"></label>` : ''}</div>`}
-    <div class="row2"><button class="btn btn-sec" onclick="pfUI.${cat}.imp=null; renderInvestPage('${cat}')">Descartar</button><button class="btn btn-pri" onclick="importCommit('${cat}')" ${n?'':'disabled'}>Añadir ${n} ${p ? 'a '+esc(p.name) : ((pfUI[cat].dest||'new')==='new' ? 'a la nueva cartera' : 'a la cartera')}</button></div>`;
-}
 /* acciones */
 function createPortfolio(cat){
   const el = document.getElementById('pfname_'+cat); const name = (el && el.value.trim()) || (cat==='crypto'?'Cartera crypto':'Cartera');
@@ -3478,51 +3436,6 @@ function addManualPos(cat){
   if(!name || !(v>=0)) return;
   state.items.push({id:uid(), cat, portfolioId:p.id, name, amount:v, currency: cat==='crypto'?'USD':'EUR', manual:true});
   pfUI[cat].manual=false; save(); renderAll();
-}
-async function importPortfolioPhoto(cat, file){
-  const U = pfUI[cat]; if(!file || !sampleNS) return;
-  U.impBusy=true; U.impErr=''; U.imp=null; renderInvestPage(cat);
-  const prompt = `Lee esta captura de una cartera de inversión (${cat==='crypto'?'criptomonedas':'acciones y ETFs'}) de un bróker o exchange.
-Responde SOLO con JSON: {"plataforma":"XTB","posiciones":[{"simbolo":"IGLN.UK","nombre":"iShares Physical Gold","cantidad":12.5,"precio_medio":45.1,"moneda":"USD","valor":560.2,"ganancia":-1.81}]}
-- plataforma: nombre del bróker o exchange si se reconoce en la captura, si no null.
-- simbolo: ${cat==='crypto'?'el código de la criptomoneda (BTC, ETH, SOL…)':'el ticker tal como aparece, con su sufijo de mercado si lo tiene'}.
-- simbolo: null si en la captura no aparece ningún ticker (no lo inventes). En nombre pon la gestora si se ve (iShares, VanEck…) y el nombre del fondo.
-- cantidad: número de ${cat==='crypto'?'unidades':'acciones o participaciones'} solo si aparece como tal; si la captura solo muestra importes, null. Nunca pongas un importe en cantidad.
-- ganancia: ganancia o pérdida de la posición en la moneda de la cuenta si aparece (negativa si es pérdida), si no null.
-- precio_medio: precio medio de compra por unidad si aparece, si no null.
-- moneda: moneda en la que cotiza el activo si se ve (USD, EUR, GBX, GBP…), si no null.
-- valor: valor actual total de la posición en ${cat==='crypto'?'dólares':'euros'} si aparece, si no null.
-Incluye todas las posiciones visibles. Si no es una cartera o no se puede leer, responde {"posiciones":[]}.`;
-  try{
-    const r = await sampleNS.json(prompt, {images:[file]});
-    const list = (r && Array.isArray(r.posiciones)) ? r.posiciones : [];
-    U.imp = list.map(x=>({on:true, sym: cat==='crypto' ? String(x.simbolo||'').toUpperCase().replace(/[^A-Z0-9]/g,'') : normTicker(x.simbolo), name: String(x.nombre||''), qty: Number(x.cantidad)||0, pl: (x.ganancia===null||x.ganancia===undefined||x.ganancia==='') ? null : Number(x.ganancia), avg: Number(x.precio_medio)||null, cur: x.moneda?String(x.moneda).toUpperCase():null, val: Number(x.valor)||null})).filter(x=>x.sym || x.val>0);
-    U.impName = String((r && r.plataforma) || '').slice(0,30) || (cat==='crypto' ? 'Cartera crypto' : 'Cartera importada'); U.dest = 'new';
-    if(!U.imp.length){ U.imp=null; U.impErr='No he encontrado posiciones en esa imagen. Prueba con una captura donde se vean los tickers y las cantidades.'; }
-  }catch(e){ U.impErr = e && e.code==='cancelled' ? '' : advErrMsg(e); }
-  U.impBusy=false; renderInvestPage(cat);
-}
-function importCommit(cat){
-  if(!currentPf(cat) && pfUI[cat].imp){
-    const dest = pfUI[cat].dest || 'new';
-    if(dest==='new'){ const nm = (pfUI[cat].impName||'').trim() || (cat==='crypto'?'Cartera crypto':'Cartera importada'); const np = {id:uid(), cat, name:nm.slice(0,30), created:todayStr()}; state.portfolios.push(np); openPf[cat] = np.id; }
-    else openPf[cat] = dest;
-  }
-  const p = currentPf(cat), rows = (pfUI[cat].imp||[]).filter(r=>r.on && ((r.sym && r.qty>0) || r.val>0)); if(!p || !rows.length) return;
-  rows.forEach(r=>{
-    const cost = (r.val>0 && isFinite(r.pl) && r.pl!==null) ? Math.round((r.val - r.pl)*100)/100 : null;
-    if(!(r.qty>0)){
-      if(!r.sym){ state.items.push({id:uid(), cat, portfolioId:p.id, name:r.name||'Posición', displayName:r.name||'Posición', amount:r.val, costDisp: cost>0?cost:null, currency: cat==='crypto'?'USD':'EUR', manual:true}); return; }
-      const sym = cat==='crypto' ? r.sym : normTicker(r.sym), cur = cat==='crypto' ? 'USD' : (r.cur || guessCur(sym));
-      state.items.push(Object.assign({id:uid(), cat, portfolioId:p.id, name:r.name||sym, displayName:r.name||sym, symbol:sym, qty:0, pendingValue:r.val, pendingCost: cost>0?cost:null, amount:r.val, live:true},
-        cat==='crypto' ? {currency:'USD', kind:'crypto'} : {qcur: cur||'USD', needsCheck:!cur, currency:'EUR', kind:'stock'}));
-      return;
-    }
-    if(cat==='crypto') state.items.push({id:uid(), cat:'crypto', portfolioId:p.id, name:r.sym, symbol:r.sym, qty:r.qty, avgCost:r.avg, amount: r.val||0, currency:'USD', kind:'crypto', live:true});
-    else { const sym = normTicker(r.sym), cur = r.cur || guessCur(sym);
-      state.items.push({id:uid(), cat:'bolsa', portfolioId:p.id, name:r.name||sym, displayName:r.name||sym, symbol:sym, qcur: cur||'USD', needsCheck: !cur, qty:r.qty, avgCost:r.avg, amount: r.val||0, currency:'EUR', kind:'stock', live:true}); }
-  });
-  pfUI[cat].imp=null; save(); renderAll(); refreshAllPrices(cat==='bolsa');
 }
 
 /* ================= Te deben ================= */
@@ -3940,7 +3853,7 @@ function renderAdvisor(){
   const btn = document.getElementById('advRunBtn'), st = document.getElementById('advStatus');
   const off = advAvailable===false;
   if(btn){ btn.disabled = off || advBusy; if(!advBusy) btn.textContent = state.advisor ? 'Actualizar análisis' : 'Analizar mis finanzas'; }
-  if(st && off && !advBusy) st.innerHTML = advOffMsg ? esc(advOffMsg) : 'Para usar el asesor, añade tu clave de Anthropic en <button class="bc-link" onclick="goToTab(\'mas\',\'ajustes\')">Ajustes › Conexiones</button>.';
+  if(st && off && !advBusy) st.innerHTML = advOffMsg ? esc(advOffMsg) : 'El asesor no está disponible ahora mismo. Cierra y vuelve a abrir la app.';
   const sug = document.getElementById('advSuggest');
   if(sug) sug.innerHTML = (advTurns.length||off) ? '' : SUGGESTIONS.map((q,i)=>`<button class="advchip" onclick="askSuggestion(${i})">${esc(q)}</button>`).join('');
   const inp = document.getElementById('advQ'), send = document.getElementById('advSend');
@@ -4380,67 +4293,8 @@ function renderAll(){
 }
 if(state.pin) openPinOverlay('unlock');
 generateRecurringForMonth();
-/* ================= Foto del ticket ================= */
-let ticketLimits = null, scanCtl = null;
-(async()=>{ try{ const s = window.claude && window.claude.use ? await window.claude.use('sample') : null;
-  if(s && s.limits){ const l = await s.limits(); ticketLimits = (l && l.images) || null; } }catch(e){} updateScanBlock(); try{ renderInvestPage('bolsa'); renderInvestPage('crypto'); }catch(e){} })();
-function updateScanBlock(){
-  const b = document.getElementById('scanBlock'); if(!b) return;
-  b.style.display = (ticketLimits && sheetType==='expense') ? '' : 'none';
-  const f = document.getElementById('scanFile');
-  if(f && ticketLimits && ticketLimits.mediaTypes && ticketLimits.mediaTypes.length) f.accept = ticketLimits.mediaTypes.join(',');
-}
 function flashField(id){ const el=document.getElementById(id); if(!el) return; el.classList.remove('filled'); void el.offsetWidth; el.classList.add('filled'); }
 function normTxt(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); }
-async function scanTicket(file){
-  if(!file || !sampleNS || !ticketLimits) return;
-  const st = document.getElementById('scanStatus'), btn = document.getElementById('scanBtn'), txt = document.getElementById('scanBtnTxt');
-  if(ticketLimits.mediaTypes && file.type && !ticketLimits.mediaTypes.includes(file.type)){ st.innerHTML = '<span class="scan-err">Formato no admitido. Usa una foto JPG, PNG o WebP.</span>'; return; }
-  if(ticketLimits.maxInputBytes && file.size > ticketLimits.maxInputBytes){ st.innerHTML = '<span class="scan-err">La foto es demasiado grande.</span>'; return; }
-  let thumb=''; try{ thumb = URL.createObjectURL(file); }catch(e){}
-  st.innerHTML = `<div class="scanprev">${thumb?`<img src="${thumb}" alt="">`:''}<div class="scanline"></div><span><span class="spin dark"></span> Leyendo el ticket…</span></div>`;
-  btn.disabled = true; txt.textContent = 'Leyendo…';
-  scanCtl = new AbortController(); const myCtl = scanCtl;
-  const names = SCOPES.map(s=>s.name);
-  const prompt = `Lee esta foto de un ticket, recibo o factura de compra. Hoy es ${todayStr()}.
-Responde SOLO con JSON con esta forma:
-{"es_ticket": true, "importe": 12.34, "moneda": "EUR", "fecha": "YYYY-MM-DD", "comercio": "Nombre", "ambito": "uno de: ${names.join(', ')}"}
-- importe: el TOTAL final pagado (con impuestos), como número con punto decimal.
-- fecha: la fecha de la compra, o null si no aparece.
-- comercio: el nombre del establecimiento, o null.
-- ambito: elige el más adecuado de la lista exacta anterior.
-Si la imagen no es un ticket o no se puede leer el total, responde {"es_ticket": false}.`;
-  try{
-    const r = await sampleNS.json(prompt, {images:[file], signal: myCtl.signal});
-    if(myCtl.signal.aborted) return;
-    const amt = Math.round((Number(r && r.importe)||0)*100)/100;
-    if(!r || r.es_ticket===false || !(amt>0)){ st.innerHTML = '<span class="scan-err">No he podido leer el total de este ticket. Rellénalo a mano o prueba con otra foto más nítida.</span>'; return; }
-    if(sheetType!=='expense') setSheetType('expense');
-    const filled=[];
-    document.getElementById('sheetAmount').value = amtStr(amt); sizeAmt(); flashField('sheetAmount'); filled.push('importe');
-    const d = String(r.fecha||'');
-    const oneYearAgo = (()=>{ const x=new Date(); x.setFullYear(x.getFullYear()-1); return localDateStr(x); })();
-    if(/^\d{4}-\d{2}-\d{2}$/.test(d) && d<=todayStr() && d>=oneYearAgo){ document.getElementById('sheetDate').value = d; syncDateChips(); flashField('sheetDate'); filled.push('fecha'); }
-    const sc = SCOPES.find(s=>normTxt(s.name)===normTxt(r.ambito)) || SCOPES.find(s=>s.id===normTxt(r.ambito));
-    if(sc){ sheetScope = sc.id; buildSheetChips(); filled.push('ámbito'); }
-    const noteEl = document.getElementById('sheetNote');
-    if(r.comercio && !noteEl.value.trim()){ noteEl.value = String(r.comercio).slice(0,60); flashField('sheetNote'); filled.push('comercio'); }
-    const cur = String(r.moneda||'EUR').toUpperCase();
-    st.innerHTML = `<div class="scan-ok">✓ Ticket leído: ${filled.join(', ')}. Revisa los datos, elige la cuenta y confirma.</div>`
-      + (cur!=='EUR' ? `<div class="scan-err">El ticket parece estar en ${esc(cur)}: revisa el importe en euros.</div>` : '')
-      + (!filled.includes('fecha') ? '<div class="scan-note">No se leyó una fecha válida: se mantiene la seleccionada.</div>' : '');
-  }catch(e){
-    if(e && e.code==='cancelled') return;
-    const m = e && e.code==='image_rejected' ? 'No se pudo usar esa imagen. Prueba con otra foto (JPG o PNG).'
-      : e && e.code==='images_unavailable' ? 'Tu cuenta no permite enviar imágenes a Claude desde aquí.' : advErrMsg(e);
-    st.innerHTML = `<span class="scan-err">${esc(m)}</span>`;
-    if(e && (e.code==='images_unavailable' || advDead(e))){ ticketLimits = null; updateScanBlock(); }
-  }finally{
-    if(scanCtl===myCtl) scanCtl=null;
-    btn.disabled=false; txt.textContent='Escanear otro ticket';
-    if(thumb) setTimeout(()=>{ try{ URL.revokeObjectURL(thumb); }catch(e){} }, 60000);
-  }
-}
 
 /* ================= Deshacer ================= */
 let undoSnap = null, undoTimer = null;
