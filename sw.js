@@ -1,9 +1,9 @@
 /* Finanzas · service worker: funciona sin conexión y muestra notificaciones */
-const VERSION = 'finanzas-v3';
+const VERSION = 'finanzas-v4';
 const SHELL = ['./', 'index.html', 'native.js', 'asesor.js', 'native.css', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
-// Recursos de terceros que sí conviene guardar (SDK de Anthropic y tipografía)
-const RUNTIME_HOSTS = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
+// Recursos de terceros que sí conviene guardar (tipografía)
+const RUNTIME_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -29,7 +29,7 @@ self.addEventListener('fetch', e => {
     }).catch(() => caches.match(req, {ignoreSearch: true}).then(r => r || caches.match('index.html'))));
     return;
   }
-  // SDK y fuentes: de la caché si ya están
+  // Fuentes: de la caché si ya están
   e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => {
     if (res.ok || res.type === 'opaque') { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
     return res;

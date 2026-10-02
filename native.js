@@ -1,7 +1,7 @@
 /* =====================================================================
    Finanzas · capa nativa para iPhone (PWA)
    - Sustituye las funciones que solo existían dentro de Claude:
-     IA (tu clave de Anthropic), precios (Crypto.com, Frankfurter, Alpha Vantage)
+     asesor integrado, precios (Crypto.com, Frankfurter, Alpha Vantage)
      y descargas (hoja de compartir de iOS).
    - Añade vibración háptica, avisos, notificaciones, Face ID y animaciones.
    Todo se guarda solo en este dispositivo.
@@ -10,17 +10,15 @@
 'use strict';
 
 const K = {
-  anth:'finzz_key_anthropic', av:'finzz_key_av', haptics:'finzz_nv_haptics', alerts:'finzz_nv_alerts',
+  av:'finzz_key_av', haptics:'finzz_nv_haptics', alerts:'finzz_nv_alerts',
   sysNotif:'finzz_nv_sysnotif', daily:'finzz_nv_daily', faceid:'finzz_nv_faceid', seen:'finzz_nv_seen', lastBackup:'finzz_nv_lastbackup'
 };
 const lsGet = k => { try{ return localStorage.getItem(k); }catch(e){ return null; } };
 const lsSet = (k, v) => { try{ v==null ? localStorage.removeItem(k) : localStorage.setItem(k, v); }catch(e){} };
+lsSet('finzz_key_anthropic', null);           // ya no se usa: se borra la clave antigua si la había
 const on = k => lsGet(k)!=='0';                 // interruptores activados por defecto
 const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
 const isStandalone = () => !!(navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches));
-const MODEL = 'claude-opus-5-5';
-const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.131.0/+esm';
-const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
 /* ======================= Vibración háptica ======================= */
 // iOS no tiene navigator.vibrate. En Safari 18+ al pulsar un <input switch> el sistema
@@ -120,130 +118,6 @@ const mcpShim = {
   }
 };
 
-/* ======================= IA con tu clave de Anthropic ======================= */
-let clientP = null;
-function getClient(){
-  const key = lsGet(K.anth); if(!key) return Promise.reject(Object.assign(new Error('sin clave'), {code:'not_granted'}));
-  if(!clientP) clientP = import(SDK_URL).then(m=>{
-    const Anthropic = m.default || m.Anthropic;
-    return {Anthropic, client: new Anthropic({apiKey:key, dangerouslyAllowBrowser:true, maxRetries:2})};
-  }).catch(e=>{ clientP = null; throw e; });
-  return clientP;
-}
-function mapErr(e, Anthropic){
-  if(e && e.code && typeof e.code==='string' && !e.status) return e;
-  const name = e && e.name;
-  if(name==='AbortError' || (Anthropic && Anthropic.APIUserAbortError && e instanceof Anthropic.APIUserAbortError)) return {code:'cancelled'};
-  const st = e && e.status;
-  const msg = String((e && e.message) || '');
-  if(st===401 || st===403) return {code:'bad_key'};
-  if(st===429) return {code:'rate_limited'};
-  if(st===400 && /too long|too large|prompt is too long/i.test(msg)) return {code:'prompt_too_large'};
-  if(st===400 && /credit|billing|balance/i.test(msg)) return {code:'no_credit'};
-  if(!st) return {code:'network'};
-  return {code:'api_error', status:st};
-}
-function toApiMessages(msgs){
-  // El primer mensaje de la app trae reglas y datos: va como instrucción de sistema
-  let system;
-  const list = msgs.slice();
-  if(list.length>1 && list[0].role==='user' && list[1].role==='user') system = String(list.shift().content);
-  const out = [];
-  list.forEach(m=>{
-    const last = out[out.length-1];
-    if(last && last.role===m.role && typeof last.content==='string' && typeof m.content==='string') last.content += '\n\n'+m.content;
-    else out.push({role:m.role, content:m.content});
-  });
-  if(out.length && out[0].role!=='user') out.shift();
-  return {system, messages: out};
-}
-async function fileToImageBlock(file){
-  // Reduce la foto (más rápido y barato) y la convierte a JPEG, incluido HEIC del iPhone
-  const url = URL.createObjectURL(file);
-  try{
-    const img = await new Promise((res, rej)=>{ const i = new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; });
-    const max = 1600, sc = Math.min(1, max/Math.max(img.naturalWidth, img.naturalHeight));
-    const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth*sc); c.height = Math.round(img.naturalHeight*sc);
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    const data = c.toDataURL('image/jpeg', .85).split(',')[1];
-    return {type:'image', source:{type:'base64', media_type:'image/jpeg', data}};
-  }catch(e){ throw {code:'image_rejected'}; }
-  finally{ URL.revokeObjectURL(url); }
-}
-function parseJsonLoose(text){
-  const t = String(text||'').replace(/```(?:json)?/gi,'').trim();
-  try{ return JSON.parse(t); }catch(e){}
-  const a = t.indexOf('{'), b = t.lastIndexOf('}');
-  if(a>=0 && b>a){ try{ return JSON.parse(t.slice(a,b+1)); }catch(e){} }
-  throw {code:'invalid_json'};
-}
-const textOf = msg => (msg.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-// Respaldo automático de modelo si Claude declina una consulta; si la API no lo aceptara, se reintenta sin él
-let useFallbacks = true;
-const withFallbacks = p => useFallbacks ? Object.assign(p, {betas:[FALLBACK_BETA], fallbacks:'default'}) : p;
-const isFallbackReject = e => useFallbacks && e && e.status===400 && /fallback/i.test(String(e.message||''));
-
-// Chat con herramientas: la app pasa {name, description, inputSchema, execute}
-async function sample(msgs, opts){
-  opts = opts || {};
-  const {Anthropic, client} = await getClient();
-  const conv = toApiMessages(msgs);
-  const tools = (opts.tools||[]).map(t=>({name:t.name, description:t.description, input_schema:t.inputSchema}));
-  const byName = Object.fromEntries((opts.tools||[]).map(t=>[t.name, t]));
-  let shown = '', truncated = false;
-  try{
-    for(let turn=0; turn<8; turn++){
-      const prefix = shown ? shown+'\n\n' : '';
-      let msg;
-      for(;;){
-        const params = withFallbacks({model:MODEL, max_tokens:16000, messages:conv.messages, output_config:{effort:'low'}});
-        if(conv.system) params.system = conv.system;
-        if(tools.length) params.tools = tools;
-        const stream = client.beta.messages.stream(params, {signal: opts.signal});
-        let cur = '';
-        stream.on('text', d=>{ cur += d; if(opts.onText) try{ opts.onText({text: prefix+cur}); }catch(e){} });
-        try{ msg = await stream.finalMessage(); break; }
-        catch(e){ if(isFallbackReject(e) && !cur){ useFallbacks = false; continue; } throw e; }
-      }
-      const txt = textOf(msg); if(txt) shown = prefix + txt;
-      if(msg.stop_reason==='refusal') throw {code:'refused', text: shown};
-      const uses = msg.content.filter(b=>b.type==='tool_use');
-      if(!uses.length || msg.stop_reason==='max_tokens'){ truncated = msg.stop_reason==='max_tokens'; break; }
-      conv.messages.push({role:'assistant', content: msg.content});
-      const results = uses.map(u=>{
-        const tool = byName[u.name];
-        try{
-          if(!tool) throw new Error('Herramienta desconocida');
-          return {type:'tool_result', tool_use_id:u.id, content: JSON.stringify(tool.execute(u.input||{}))};
-        }catch(e){ return {type:'tool_result', tool_use_id:u.id, is_error:true, content: String((e && e.message) || e)}; }
-      });
-      conv.messages.push({role:'user', content: results});
-    }
-  }catch(e){ const m = mapErr(e, Anthropic); if(shown && !m.text) m.text = shown; throw m; }
-  return {text: shown, truncated};
-}
-// Respuesta en JSON (análisis del asesor, lectura de tickets y extractos)
-sample.json = async function(prompt, opts){
-  opts = opts || {};
-  const {Anthropic, client} = await getClient();
-  try{
-    const content = [];
-    for(const f of (opts.images||[])) content.push(await fileToImageBlock(f));
-    content.push({type:'text', text: prompt + '\n\nResponde únicamente con el JSON, sin texto adicional.'});
-    const call = () => client.beta.messages.create(withFallbacks({model:MODEL, max_tokens:16000, output_config:{effort: (opts.images||[]).length ? 'low' : 'medium'},
-      messages:[{role:'user', content}]}), {signal: opts.signal});
-    let msg;
-    try{ msg = await call(); }
-    catch(e){ if(!isFallbackReject(e)) throw e; useFallbacks = false; msg = await call(); }
-    if(msg.stop_reason==='refusal') throw {code:'refused'};
-    return parseJsonLoose(textOf(msg));
-  }catch(e){ throw mapErr(e, Anthropic); }
-};
-sample.limits = async () => ({
-  tools:{maxCount: 8},
-  images:{mediaTypes:['image/jpeg','image/png','image/webp','image/gif','image/heic','image/heif'], maxInputBytes: 30*1024*1024}
-});
-
 /* ======================= Guardar archivos (hoja de compartir) ======================= */
 const downloadsShim = {
   async save({filename, data}){
@@ -260,7 +134,7 @@ const downloadsShim = {
 /* ======================= Puente con la app ======================= */
 window.claude = {
   async use(name){
-    if(name==='sample') return lsGet(K.anth) ? sample : (window.nvLocalAdvisor || null);   // sin clave: asesor integrado gratuito
+    if(name==='sample') return window.nvLocalAdvisor || null;   // asesor integrado gratuito, sin conexión
     if(name==='mcp') return mcpShim;
     if(name==='downloads') return downloadsShim;
     return null;   // 'db' y 'user': sin nube, los datos viven en el dispositivo
@@ -455,18 +329,13 @@ window.nvTestNotify = function(){
 
 function renderConnections(){
   const box = document.getElementById('connCard'); if(!box) return;
-  const ak = lsGet(K.anth), vk = lsGet(K.av);
+  const vk = lsGet(K.av);
   const mask = k => k ? '••••' + k.slice(-4) : '';
   box.innerHTML = `
   <div class="nv-conn">
-    <div class="ch"><div><div class="n">Asesor financiero</div><div class="s">${ak ? 'Claude, con tu clave de Anthropic (de pago)' : 'Integrado · gratis, privado y sin internet'}</div></div>
+    <div class="ch"><div><div class="n">Asesor financiero</div><div class="s">Integrado · gratis, privado y sin internet</div></div>
       <span class="pill ok">Activo</span></div>
-    ${ak ? `<div class="nv-keyset"><code>${mask(ak)}</code><button class="btn-link" onclick="nvRemoveKey('anth')" style="color:var(--rust)">Volver al gratuito</button></div>`
-         : `<div class="hintx" style="margin-top:0;">Analiza tus gastos, límites, deudas, colchón y metas directamente en el iPhone. No envía tus datos a ningún sitio.</div>
-            <details class="nv-more"><summary>Opcional: usar Claude (de pago, con chat libre y lectura de tickets)</summary>
-            <div class="nv-keyrow" style="margin-top:10px;"><input id="nvAnthKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-..."><button onclick="nvSaveKey('anth')">Guardar</button></div>
-            <div class="err" id="nvAnthErr"></div>
-            <div class="hintx">Requiere una clave de <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> con saldo: la API se paga aparte de tu suscripción de Claude (unos céntimos por consulta).</div></details>`}
+    <div class="hintx" style="margin-top:0;">Analiza tus gastos, límites, deudas, colchón y metas directamente en el iPhone. No envía tus datos a ningún sitio.</div>
   </div>
   <div class="nv-conn">
     <div class="ch"><div><div class="n">Precios de bolsa</div><div class="s">Alpha Vantage · clave gratuita, 25 consultas al día</div></div>
@@ -480,31 +349,24 @@ function renderConnections(){
     <div class="ch"><div><div class="n">Criptomonedas y divisas</div><div class="s">Crypto.com y Banco Central Europeo · sin clave</div></div><span class="pill ok">Activo</span></div>
   </div>`;
 }
-window.nvSaveKey = async function(which){
-  const inp = document.getElementById(which==='anth'?'nvAnthKey':'nvAvKey'), err = document.getElementById(which==='anth'?'nvAnthErr':'nvAvErr');
+window.nvSaveKey = async function(){
+  const inp = document.getElementById('nvAvKey'), err = document.getElementById('nvAvErr');
   const v = (inp.value||'').trim(); if(!v) return;
   err.textContent = 'Comprobando…'; err.style.color = 'var(--ink3)';
   try{
-    if(which==='anth'){
-      const r = await fetch('https://api.anthropic.com/v1/models?limit=1', {headers:{'x-api-key':v, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true'}});
-      if(r.status===401 || r.status===403) throw new Error('Esa clave no es válida.');
-      if(!r.ok) throw new Error('No se pudo comprobar ahora (error '+r.status+'). Inténtalo de nuevo.');
-      lsSet(K.anth, v);
-    } else {
-      const t = await (await fetch('https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=IBM&apikey='+encodeURIComponent(v))).text();
-      if(/invalid api ?key|apikey is invalid/i.test(t)) throw new Error('Esa clave no es válida.');
-      lsSet(K.av, v);
-      try{ const q = JSON.parse(localStorage.getItem('finzz_av')||'{}'); q.blocked=false; localStorage.setItem('finzz_av', JSON.stringify(q)); }catch(e){}
-    }
+    const t = await (await fetch('https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=IBM&apikey='+encodeURIComponent(v))).text();
+    if(/invalid api ?key|apikey is invalid/i.test(t)) throw new Error('Esa clave no es válida.');
+    lsSet(K.av, v);
+    try{ const q = JSON.parse(localStorage.getItem('finzz_av')||'{}'); q.blocked=false; localStorage.setItem('finzz_av', JSON.stringify(q)); }catch(e){}
     haptic('success');
-    location.reload();   // vuelve a conectar el asesor y los precios con la clave nueva
+    location.reload();   // vuelve a cargar los precios con la clave nueva
   }catch(e){
     haptic('error'); err.style.color = ''; err.textContent = (e && e.message && !/fetch/i.test(e.message)) ? e.message : 'Sin conexión. Inténtalo de nuevo.';
   }
 };
-window.nvRemoveKey = function(which){
-  if(!confirm(which==='anth' ? '¿Quitar la clave de Anthropic y volver al asesor gratuito integrado?' : '¿Quitar la clave de Alpha Vantage?')) return;
-  lsSet(which==='anth'?K.anth:K.av, null); haptic('warning'); location.reload();
+window.nvRemoveKey = function(){
+  if(!confirm('¿Quitar la clave de Alpha Vantage?')) return;
+  lsSet(K.av, null); haptic('warning'); location.reload();
 };
 
 /* ======================= Ganchos sobre la app ======================= */
@@ -628,14 +490,6 @@ function installHooks(){
   // Pinta lo nuevo con cada actualización de la app
   wrap('renderAll', ()=>{ renderConnections(); renderNativeSettings(); scheduleAlerts(); });
   wrap('save', scheduleAlerts);
-
-  // Mensajes de error de la IA propios de esta versión
-  try{
-    ADV_ERR.bad_key = 'Tu clave de Anthropic no es válida o ha caducado. Cámbiala en Más › Ajustes › Conexiones.';
-    ADV_ERR.no_credit = 'Tu cuenta de Anthropic no tiene saldo. Añade crédito en console.anthropic.com.';
-    ADV_ERR.network = 'Sin conexión a internet. Inténtalo cuando tengas cobertura.';
-    ADV_ERR.not_granted = 'Añade tu clave de Anthropic en Más › Ajustes › Conexiones para usar el asesor.';
-  }catch(e){}
 
   // Privacidad: tapa los importes en el selector de apps y vuelve a pedir el PIN tras 1 minuto fuera
   let hiddenAt = 0;

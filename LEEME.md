@@ -6,7 +6,7 @@ Tu app de finanzas como app instalable (PWA): pantalla completa, icono propio, f
 
 - **Tus datos nunca salen del iPhone.** No hay servidor, cuenta ni base de datos: todo se guarda en el almacenamiento local de la app.
 - La web solo aloja el *código*, que no contiene ningún dato tuyo ni ninguna clave.
-- Tus claves de API (Anthropic y Alpha Vantage) se guardan solo en el iPhone y únicamente se envían a esos servicios.
+- Tu clave de Alpha Vantage (opcional, para precios de bolsa) se guarda solo en el iPhone y únicamente se envía a ese servicio.
 - La página está marcada para que los buscadores no la indexen.
 - Con PIN activado: Face ID para abrir, la app se vuelve a bloquear tras 1 minuto en segundo plano y los importes quedan ocultos en el selector de apps.
 
@@ -15,7 +15,7 @@ Tu app de finanzas como app instalable (PWA): pantalla completa, icono propio, f
 1. Crea una cuenta en <https://github.com> (si no tienes).
 2. Pulsa **New repository**. Ponle un nombre poco obvio (por ejemplo `fz-7k2q`) y elige **Public**.
    *(Los repositorios privados también sirven, pero publicar con Pages desde uno privado requiere GitHub Pro. Al ser público, el código es visible, pero tus datos no están ahí.)*
-3. En el repositorio, pulsa **Add file → Upload files** y arrastra **todo el contenido** de esta carpeta (`index.html`, `native.js`, `native.css`, `sw.js`, `manifest.webmanifest`, `robots.txt` y la carpeta `icons`). Pulsa **Commit changes**.
+3. En el repositorio, pulsa **Add file → Upload files** y arrastra **todo el contenido** de esta carpeta (`index.html`, `asesor.js`, `native.js`, `native.css`, `sw.js`, `manifest.webmanifest`, `robots.txt` y la carpeta `icons`). Pulsa **Commit changes**.
 4. Ve a **Settings → Pages**. En *Branch* elige `main` y la carpeta `/ (root)`, y pulsa **Save**.
 5. Espera 1 o 2 minutos. Tu dirección será `https://TU-USUARIO.github.io/fz-7k2q/`.
 
@@ -34,7 +34,6 @@ Tu app de finanzas como app instalable (PWA): pantalla completa, icono propio, f
 
 - **Conexiones**
   - *Asesor financiero*: viene **integrado y es gratis**. Analiza tus datos en el propio iPhone, sin internet, y no envía nada a ningún sitio. Responde sobre el mes, gastos fuera de lo normal, deudas, ahorro para tu meta, suscripciones, colchón, límites e inversiones, y crea un plan con «Analizar mis finanzas».
-    - Opcional y de pago: si algún día quieres chat libre y lectura de tickets con Claude, pega una clave de <https://console.anthropic.com/settings/keys>. La API se paga aparte de la suscripción de Claude (unos céntimos por consulta).
   - *Precios de bolsa*: clave gratuita de <https://www.alphavantage.co/support/#api-key> (25 consultas al día).
   - *Cripto y divisas*: funcionan solas (Crypto.com y Banco Central Europeo).
 - **Avisos y vibración**: activa **Notificaciones del sistema** (solo funciona con la app ya instalada; requiere iOS 16.4 o posterior).
