@@ -1,5 +1,5 @@
 /* Finanzas · service worker: funciona sin conexión y muestra notificaciones */
-const VERSION = 'finanzas-v5';
+const VERSION = 'finanzas-v6';
 const SHELL = ['./', 'index.html', 'native.js', 'asesor.js', 'native.css', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 // Recursos de terceros que sí conviene guardar (tipografía)
@@ -23,7 +23,8 @@ self.addEventListener('fetch', e => {
 
   // La app en sí: primero la red (para recibir actualizaciones) y, sin conexión, la copia guardada
   if (url.origin === location.origin) {
-    e.respondWith(fetch(req).then(res => {
+    const fresh = req.mode === 'navigate' ? fetch(req.url, {cache: 'no-cache', credentials: 'same-origin'}) : fetch(req, {cache: 'no-cache'});
+    e.respondWith(fresh.then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req, {ignoreSearch: true}).then(r => r || caches.match('index.html'))));
