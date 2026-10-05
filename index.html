@@ -1163,6 +1163,7 @@ button:focus-visible{outline:2px solid color-mix(in srgb, var(--accText) 60%, tr
 .payrow{display:flex; flex-direction:column; gap:6px; font-size:12.5px; font-weight:600; color:var(--ink2); margin:0 0 12px;}
 .payrow select, .addrow2 select{min-height:44px; border-radius:var(--r-sm); border:1px solid var(--hair); background:var(--card2); color:var(--ink); padding:0 10px;}
 .sellbox{border-top:1px solid var(--hair); padding-top:12px; margin-top:4px;}
+.tradesel{margin-bottom:12px;}
 .sb-t{font-size:13.5px; font-weight:700; margin-bottom:10px;}
 
 /* ================= v14 · QA en móvil real ================= */
@@ -3272,11 +3273,16 @@ function posRowHtml(cat, it){
       <label>Precio medio de compra (${esc(cur==='GBX'?'peniques':cur||'moneda')})<input type="number" step="any" inputmode="decimal" value="${it.avgCost||''}" placeholder="Opcional" onchange="updatePos('${cat}','${it.id}','avgCost',this.value)"></label>
       ${cat==='bolsa'?`<label>Moneda de cotización<select onchange="updatePos('${cat}','${it.id}','qcur',this.value)">${['EUR','USD','GBX','GBP','CHF','CAD','JPY','SEK','DKK','NOK'].map(x=>`<option ${x===(it.qcur||'')?'selected':''}>${x}</option>`).join('')}</select></label>`:''}`
       : `<label>Valor (${cat==='crypto'?'$':'€'})<input type="number" step="any" inputmode="decimal" value="${Math.round(Number(it.amount||0)*100)/100}" onchange="updatePos('${cat}','${it.id}','amount',this.value)"></label>`}
-      ${it.live ? `<div class="sellbox"><div class="sb-t">Registrar una venta</div>
-        <div class="addrow2"><label>Cantidad<input type="number" step="any" inputmode="decimal" id="sellq_${it.id}" placeholder="máx. ${fmtNum(it.qty)}"></label><label>Precio (${esc(cur==='GBX'?'peniques':cur||'')})<input type="number" step="any" inputmode="decimal" id="sellp_${it.id}" value="${it.lastPrice>0?it.lastPrice:''}"></label></div>
+      ${it.live ? (()=>{ const tm = tradeMode[it.id]||'buy', pl = esc(cur==='GBX'?'peniques':cur||'');
+        return `<div class="sellbox"><div class="modesel tradesel"><button class="${tm==='buy'?'sel':''}" onclick="setTradeMode('${cat}','${it.id}','buy')">Comprar</button><button class="${tm==='sell'?'sel':''}" onclick="setTradeMode('${cat}','${it.id}','sell')">Vender</button></div>
+        ${tm==='buy' ? `<div class="addrow2"><label>Cantidad<input type="number" step="any" inputmode="decimal" id="buyq_${it.id}" placeholder="0"></label><label>Precio (${pl})<input type="number" step="any" inputmode="decimal" id="buyp_${it.id}" value="${it.lastPrice>0?it.lastPrice:''}"></label></div>
+        <label class="payrow">Pagado con<select id="buya_${it.id}">${payOptionsHtml('No descontar de ninguna cuenta')}</select></label>
+        <div class="pferr" id="buyerr_${it.id}"></div>
+        <button class="btn btn-pri btn-block" onclick="buyPos('${cat}','${it.id}')">Registrar compra</button>`
+        : `<div class="addrow2"><label>Cantidad<input type="number" step="any" inputmode="decimal" id="sellq_${it.id}" placeholder="máx. ${fmtNum(it.qty)}"></label><label>Precio (${pl})<input type="number" step="any" inputmode="decimal" id="sellp_${it.id}" value="${it.lastPrice>0?it.lastPrice:''}"></label></div>
         <label class="payrow">Ingresar en<select id="sella_${it.id}">${payOptionsHtml('No ingresar en ninguna cuenta')}</select></label>
         <div class="pferr" id="sellerr_${it.id}"></div>
-        <button class="btn btn-sec btn-block" onclick="sellPos('${cat}','${it.id}')">Registrar venta</button></div>` : ''}
+        <button class="btn btn-sec btn-block" onclick="sellPos('${cat}','${it.id}')">Registrar venta</button>`}</div>`; })() : ''}
       <div class="pos-actions">${cat==='bolsa' && !it.live ? `<button class="btn btn-sec" onclick="linkQuote('${it.id}')">Vincular a su cotización</button>` : ''}${cat==='bolsa'&&it.live&&(it.priceErr||it.needsCheck)?`<button class="btn btn-sec" onclick="searchFor('${cat}','${esc(String(it.symbol).split('.')[0])}')">Buscar el valor correcto</button>`:''}<button class="btn btn-danger" onclick="removeItem('${it.id}')">Eliminar posición</button></div>
     </div>`:''}
   </div>`;
@@ -3418,6 +3424,17 @@ function linkQuote(id){
   pfUI.bolsa.linkId = id; pfUI.bolsa.edit = null; pfUI.bolsa.pick=null;
   const q = String(it.displayName||it.name||'').replace(/\b(ETF|ETC|UCITS|Acc|Dist)\b/gi,'').trim();
   searchFor('bolsa', q);
+}
+const tradeMode = {};
+function setTradeMode(cat, id, m){ tradeMode[id] = m; renderInvestPage(cat); }
+function buyPos(cat, id){
+  const pos = state.items.find(i=>i.id===id); if(!pos) return;
+  const q = numVal('buyq_'+id), px = numVal('buyp_'+id), acc = strVal('buya_'+id);
+  const err = document.getElementById('buyerr_'+id);
+  if(!(q>0)){ if(err) err.textContent = 'Indica cuántas has comprado.'; return; }
+  if(acc && !(px>0)){ if(err) err.textContent = 'Indica el precio de compra para descontar el dinero de la cuenta.'; return; }
+  investBuy(cat, pos.portfolioId, {symbol:pos.symbol, name:pos.displayName||pos.name, qcur:pos.qcur, qty:q, price:px>0?px:0, accId:acc});
+  save(); renderAll();
 }
 function sellPos(cat, id){
   const pos = state.items.find(i=>i.id===id); if(!pos) return;
@@ -4456,7 +4473,7 @@ function makeUndoable(name, label, ms){
     return r;
   };
 }
-[['deleteMovement','Movimiento eliminado'],['removeItem', id=>{ const it=state.items.find(i=>i.id===id); return it && (it.cat==='bolsa'||it.cat==='crypto') ? 'Posición eliminada' : 'Cuenta eliminada'; }],['deletePortfolio','Cartera eliminada'],['payDebt',(id,a)=>{ const it=state.items.find(i=>i.id===id); return it && Number(a)>=Number(it.amount)-0.004 ? 'Deuda saldada 🎉' : 'Pago registrado'; }],['collectPart',(id,a)=>{ const it=state.items.find(i=>i.id===id); return it && Number(a)>=Number(it.amount)-0.004 ? 'Marcado como cobrado' : 'Cobro parcial registrado'; }],['sellPos','Venta registrada'],['deleteCustomScope','Ámbito eliminado'],
+[['deleteMovement','Movimiento eliminado'],['removeItem', id=>{ const it=state.items.find(i=>i.id===id); return it && (it.cat==='bolsa'||it.cat==='crypto') ? 'Posición eliminada' : 'Cuenta eliminada'; }],['deletePortfolio','Cartera eliminada'],['payDebt',(id,a)=>{ const it=state.items.find(i=>i.id===id); return it && Number(a)>=Number(it.amount)-0.004 ? 'Deuda saldada 🎉' : 'Pago registrado'; }],['collectPart',(id,a)=>{ const it=state.items.find(i=>i.id===id); return it && Number(a)>=Number(it.amount)-0.004 ? 'Marcado como cobrado' : 'Cobro parcial registrado'; }],['sellPos','Venta registrada'],['buyPos','Compra registrada'],['deleteCustomScope','Ámbito eliminado'],
  ['deleteRecurring','Recurrente eliminado'],['deleteSavingsGoal','Meta de ahorro eliminada'],['deleteSnapshot','Foto de patrimonio eliminada'],
  ['collectDebt','Marcado como cobrado'],['resetAll','Todos los datos borrados',10000]].forEach(([n,l,ms])=>makeUndoable(n,l,ms));
 
