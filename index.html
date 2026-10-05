@@ -1167,7 +1167,8 @@ button:focus-visible{outline:2px solid color-mix(in srgb, var(--accText) 60%, tr
 
 /* ================= v14 · QA en móvil real ================= */
 input, select, textarea, button{min-width:0;}
-.chip.addrow input[type=text], .newcat input, .filterrow input, .goalinline input, .newpf input, .srch input, .owedfield input{min-width:0; flex:1 1 0; width:0;}
+.chip.addrow input[type=text], .newcat input, .filterrow input, .goalinline input, .newpf input, .srch input{min-width:0; flex:1 1 0; width:0;}
+.owedfield input{width:100%; min-width:0;}
 .chip.addrow{flex-wrap:nowrap;}
 .chip.addrow input[type=number]{width:78px; flex:0 0 78px;}
 .chip.addrow .plus{flex:0 0 36px;}
@@ -1286,6 +1287,28 @@ body.privacy .dn-amt{display:none;} body.privacy .dn-mask{display:inline;}
 .sl-n{flex:1; min-width:0; font-weight:500;}
 .sl-v{font-weight:600;}
 .sl-p{width:3.2em; text-align:right; color:var(--ink2); font-size:13px;}
+/* lista de límites */
+.limlist{padding:4px 16px;}
+.limrow{display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--hair);}
+.limrow:last-child{border-bottom:none;}
+.lim-i{flex:1; min-width:0;} .lim-n{font-size:15.5px; font-weight:600; letter-spacing:-0.01em;} .lim-s{font-size:12.5px; color:var(--ink3); margin-top:1px;}
+.lim-in{display:flex; align-items:center; gap:4px; background:var(--card2); border:1px solid var(--hair); border-radius:12px; padding:0 10px 0 4px; flex:none;}
+.lim-in input{width:72px; min-height:40px; border:none; background:none; color:var(--ink); text-align:right; font-size:16px; padding:0 2px;}
+.lim-in input:focus, .lim-in input:focus-visible{outline:none !important; box-shadow:none !important;} .lim-in:focus-within{border-color:color-mix(in srgb, var(--gold) 60%, transparent);}
+.lim-in span{color:var(--ink3); font-size:14px;}
+/* editar "me deben" */
+.owedit{margin-top:12px; border-top:1px solid var(--hair); padding-top:10px;}
+.owedit summary{cursor:pointer; font-size:13.5px; font-weight:600; color:var(--ink2); list-style:none; padding:4px 0;}
+.owedit summary::-webkit-details-marker{display:none;}
+.owedit summary::before{content:'✎ ';}
+.owedit[open] summary{margin-bottom:10px;}
+.owedit .payrow input, .owedit .addrow2 input{min-height:44px; border-radius:var(--r-sm); border:1px solid var(--hair); background:var(--card2); color:var(--ink); padding:0 12px; font-size:16px; width:100%; min-width:0;}
+/* gesto de volver */
+.backhint{position:fixed; left:0; top:0; z-index:90; width:44px; height:52px; border-radius:0 26px 26px 0; pointer-events:none; opacity:0;
+  display:flex; align-items:center; justify-content:flex-end; padding-right:10px; background:var(--card); border:1px solid var(--hair); border-left:none;
+  box-shadow:0 8px 24px -10px rgba(0,0,0,.5); color:var(--ink3); font-size:26px; font-weight:600; transition:opacity .15s, color .15s, background .15s;}
+.backhint.show{opacity:1;}
+.backhint.ready{color:var(--bg); background:var(--gold);}
 </style>
 </head>
 <body>
@@ -1407,8 +1430,11 @@ body.privacy .dn-amt{display:none;} body.privacy .dn-mask{display:inline;}
     </div>
 
     <div class="subview" id="sub-limites">
-      <div class="hint">Toca un ámbito para ver sus movimientos. Escribe un límite mensual a la derecha; la marca blanca indica tu tope.</div>
+      <div class="hint">Así vas este mes. Toca un ámbito para ver sus movimientos; la marca blanca indica tu límite.</div>
       <div class="card" id="scopeChart" style="padding:18px 16px 12px;"></div>
+      <div class="section-head"><span class="group-title">Tus límites mensuales</span><span class="mono" id="limitsTotal" style="color:var(--ink2);font-weight:600;font-size:13.5px;"></span></div>
+      <div class="hint" style="margin-top:-4px;">Pon cuánto quieres gastar como máximo cada mes en cada ámbito. Déjalo vacío si no quieres límite.</div>
+      <div class="card limlist" id="limitsList"></div>
       <div class="group-title">Recurrentes</div>
       <div id="recurringList"></div>
       <div class="group-title">Tus ámbitos</div>
@@ -2637,6 +2663,7 @@ function renderGastos(){
 
   renderAnomalies();
   renderScopeChart(monthExp);
+  renderLimitsList(monthExp);
   renderRecurring();
 
   renderBigScopeChart(monthExp, monthTotal);
@@ -2754,6 +2781,7 @@ function renderMas(){
             <div class="pferr" id="colerr_${it.id}"></div>
             <button class="dp-btn ok" onclick="collectFromUI('${it.id}','colamt_')">Registrar cobro</button>
             <div class="pb-hint" style="margin-top:8px;">Si te pagan una parte, pon esa cantidad: el resto seguirá pendiente.</div>
+            ${owedEditHtml(it)}
           </div>`;
         }
       }
@@ -3443,6 +3471,23 @@ let panelFn = null;
 function openPanel(fn){ panelFn = fn; fn(); document.getElementById('panelBackdrop').classList.add('show'); document.getElementById('panelSheet').classList.add('show'); document.body.style.overflow='hidden'; }
 function closePanel(){ panelFn=null; document.getElementById('panelBackdrop').classList.remove('show'); document.getElementById('panelSheet').classList.remove('show'); document.body.style.overflow=''; }
 function openOwedSheet(){ openPanel(renderOwedPanel); }
+const owedEditOpen = new Set();
+function owedEditHtml(it){
+  return `<details class="owedit" ${owedEditOpen.has(it.id)?'open':''} ontoggle="this.open ? owedEditOpen.add('${it.id}') : owedEditOpen.delete('${it.id}')">
+    <summary>Editar nombre y datos</summary>
+    <label class="payrow">Nombre<input type="text" maxlength="40" value="${esc(it.name)}" autocomplete="off" onchange="setOwedField('${it.id}','name',this.value)"></label>
+    <div class="addrow2"><label>Concepto<input type="text" maxlength="80" value="${esc(it.concept||'')}" placeholder="Opcional" onchange="setOwedField('${it.id}','concept',this.value)"></label>
+      <label>Vence<input type="date" value="${esc(it.due||'')}" onchange="setOwedField('${it.id}','due',this.value)"></label></div>
+  </details>`;
+}
+function setOwedField(id, field, val){
+  const it = state.items.find(i=>i.id===id); if(!it) return;
+  const v = String(val||'').trim();
+  if(field==='name'){ if(!v) { renderAll(); return; } it.name = v.slice(0,40); }
+  else if(field==='concept') it.concept = v.slice(0,80);
+  else if(field==='due') it.due = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+  save(); renderAll();
+}
 function renderOwedPanel(){
   const box = document.getElementById('panelSheet'); if(!box) return;
   const its = state.items.filter(i=>i.cat==='medeben').sort((a,b)=>((a.due||'9')>(b.due||'9')?1:-1));
@@ -3456,7 +3501,8 @@ function renderOwedPanel(){
       <div class="ow-act2"><div class="addrow2"><label>Te han pagado (€)<input type="number" step="0.01" inputmode="decimal" id="owamt_${it.id}" value="${Number(it.amount||0)}"></label>
         <label>Ingresar en<select id="owacc_${it.id}" aria-label="Cuenta donde entra el dinero"><option value="">Ninguna cuenta</option>${accs.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select></label></div>
         <div class="pferr" id="owerr_${it.id}"></div>
-        <button class="btn btn-pri btn-block" onclick="collectFromUI('${it.id}','owamt_')">Registrar cobro</button></div>
+        <button class="btn btn-pri btn-block" onclick="collectFromUI('${it.id}','owamt_')">Registrar cobro</button>
+        ${owedEditHtml(it)}</div>
     </div>`).join('') : `<div class="pfempty" style="text-align:center;">Nadie te debe dinero ahora mismo.</div>`}
     <button class="btn btn-sec btn-block" style="margin-top:14px;" onclick="closePanel(); openExpenseSheet('owed')">＋ Añadir lo que te deben</button>`;
 }
@@ -3625,6 +3671,25 @@ function renderPinSettings(){
 }
 
 /* ---- Budgets per scope ---- */
+function limitsTotalText(){ const t = Object.values(state.budgets||{}).reduce((a,v)=>a+(Number(v)||0),0); return t>0 ? fmt(t)+' al mes' : ''; }
+function renderLimitsList(monthExp){
+  const box = document.getElementById('limitsList'); if(!box) return;
+  const spentOf = id => monthExp.filter(e=>e.scope===id).reduce((a,e)=>a+e.amount,0);
+  box.innerHTML = SCOPES.map(sc=>{ const lim = state.budgets[sc.id]||'', sp = spentOf(sc.id);
+    return `<div class="limrow">
+      <div class="icn" style="width:34px;height:34px;background:${iconBg(sc.color)};color:${sc.color}">${iconSvg(sc.icon)}</div>
+      <div class="lim-i"><div class="lim-n">${esc(sc.name)}</div><div class="lim-s">${sp ? 'Llevas '+fmt(sp)+' este mes' : 'Sin gastos este mes'}</div></div>
+      <label class="lim-in"><input type="number" inputmode="decimal" step="1" min="0" class="mono" placeholder="—" value="${lim}" aria-label="Límite mensual de ${esc(sc.name)}" onchange="saveLimit('${sc.id}', this.value)"><span>€</span></label>
+    </div>`; }).join('');
+  const t = document.getElementById('limitsTotal'); if(t) t.textContent = limitsTotalText();
+}
+function saveLimit(scopeId, val){
+  setBudget(scopeId, String(val).replace(',','.'));
+  // sin redibujar la lista, para no perder el foco si estás pasando al siguiente campo
+  const mk = monthKey(); renderScopeChart(state.expenses.filter(e=>monthKey(e.date)===mk));
+  const t = document.getElementById('limitsTotal'); if(t) t.textContent = limitsTotalText();
+  try{ renderResumen(); }catch(e){}
+}
 function setBudget(scopeId, val){
   const v = parseFloat(val);
   if(isNaN(v) || v<=0) delete state.budgets[scopeId]; else state.budgets[scopeId]=v;
@@ -3635,7 +3700,7 @@ function renderScopeChart(monthExp){
   const rows = SCOPES.map(s=>({s, spent: monthExp.filter(e=>e.scope===s.id).reduce((s2,e)=>s2+e.amount,0), limit: state.budgets[s.id]||0}))
     .filter(r=>r.spent>0 || r.limit>0)
     .sort((a,b)=>b.spent-a.spent);
-  if(rows.length===0){ box.innerHTML = '<div class="empty" style="padding:0;">Registra un gasto para ver el desglose por ámbito.</div>'; return; }
+  if(rows.length===0){ box.innerHTML = '<div class="empty" style="padding:0;">Registra un gasto o pon un límite abajo para ver aquí cómo vas.</div>'; return; }
   const maxVal = Math.max(...rows.map(r=>Math.max(r.spent,r.limit)),1);
   box.innerHTML = rows.map(r=>{
     const pctSpent = Math.min(r.spent/maxVal*100,100);
@@ -3646,7 +3711,6 @@ function renderScopeChart(monthExp){
       <div class="scoperow-top">
         <div class="icn" style="width:30px;height:30px;background:${iconBg(r.s.color)};color:${r.s.color}">${iconSvg(r.s.icon)}</div>
         <div class="info" onclick="filterByScope('${r.s.id}')"><div class="n">${r.s.name} <span style="color:var(--ink3);font-weight:500;">›</span></div><div class="s">${fmt(r.spent)}${r.limit?' de '+fmt(r.limit):''}${r.limit?` · <b style="color:${overBudget?'var(--rust)':'var(--ink2)'}">${Math.round(r.spent/r.limit*100)}%</b>`:''}</div></div>
-        <input type="number" class="scopelimit mono" placeholder="Límite" value="${r.limit||''}" onchange="setBudget('${r.s.id}', this.value); renderGastos();">
       </div>
       <div class="scopetrack">
         <div class="scopefill" style="width:${pctSpent}%;background:linear-gradient(90deg, ${barColor}, color-mix(in srgb, ${barColor} 65%, white))"></div>
@@ -4499,7 +4563,7 @@ function initSwipeSubviews(){
     let sx=0, sy=0, ok=false;
     view.addEventListener('touchstart', e=>{
       const t = e.touches && e.touches[0]; if(!t || e.touches.length>1){ ok=false; return; }
-      ok = !e.target.closest('.hscroll, input, textarea, select, .chartcard, .bc-ring, .sheet');
+      ok = !e.target.closest('.hscroll, input, textarea, select, .chartcard, .bc-ring, .sheet') && t.clientX > EDGE_PX;
       sx=t.clientX; sy=t.clientY;
     }, {passive:true});
     view.addEventListener('touchend', e=>{
@@ -4531,6 +4595,85 @@ document.addEventListener('visibilitychange', ()=>{
 initSubmenus();
 renderAll();
 initScrollers();
+
+/* ================= Volver atrás deslizando desde el borde izquierdo (como en iPhone) ================= */
+const EDGE_PX = 28;
+const navStack = []; let navMuted = 0;
+function navNow(){
+  const v = document.querySelector('.view.active'); if(!v) return null;
+  const sv = v.querySelector('.subview.active');
+  return {view: v.id.replace('view-',''), sub: sv ? sv.id.replace('sub-','') : null, y: window.scrollY||0};
+}
+function navPush(){
+  if(navMuted) return; const n = navNow(); if(!n) return;
+  const last = navStack[navStack.length-1];
+  if(last && last.view===n.view && last.sub===n.sub){ last.y = n.y; return; }
+  navStack.push(n); if(navStack.length>30) navStack.shift();
+}
+function navMute(fn){ navMuted++; try{ return fn(); } finally{ navMuted--; } }
+(function hookNav(){
+  // cambios de pestaña
+  const bar = document.querySelector('.tabbar');
+  if(bar) bar.addEventListener('click', e=>{
+    const b = e.target.closest && e.target.closest('.tab'); if(!b) return;
+    const n = navNow(); if(n && n.view!==b.dataset.view) navPush();
+  }, true);
+  // cambios de sección dentro de una pestaña
+  const origSub = setSubview;
+  setSubview = window.setSubview = function(name){
+    const n = navNow(), target = document.getElementById('sub-'+name);
+    if(n && target && target.closest('.view') && target.closest('.view').id==='view-'+n.view && n.sub!==name) navPush();
+    return origSub.apply(this, arguments);
+  };
+  // goToTab = un solo paso atrás aunque cambie pestaña y sección
+  const origGo = goToTab;
+  goToTab = window.goToTab = function(view, sub){
+    const n = navNow(); if(n && (n.view!==view || (sub && n.sub!==sub))) navPush();
+    return navMute(()=>origGo.apply(this, arguments));
+  };
+})();
+function navBack(){
+  const sheet = document.getElementById('expenseSheet');
+  if(sheet && sheet.classList.contains('show')){ closeExpenseSheet(); return true; }
+  const panel = document.getElementById('panelSheet');
+  if(panel && panel.classList.contains('show')){ closePanel(); return true; }
+  const pin = document.getElementById('pinOverlay');
+  if(pin && pin.classList.contains('show')) return false;
+  const cur = navNow();
+  for(const cat of ['bolsa','crypto']){
+    if(openPf[cat] && cur && cur.sub===cat){ closePortfolio(cat); return true; }
+  }
+  const prev = navStack.pop(); if(!prev) return false;
+  navMute(()=>{
+    const btn = document.querySelector(`.tab[data-view="${prev.view}"]`);
+    if(btn && (!cur || cur.view!==prev.view)) btn.click();
+    if(prev.sub) setSubview(prev.sub);
+  });
+  requestAnimationFrame(()=>{ try{ window.scrollTo(0, prev.y||0); }catch(e){} });
+  return true;
+}
+(function edgeSwipe(){
+  const hint = document.createElement('div'); hint.className='backhint'; hint.innerHTML='<span>‹</span>'; document.body.appendChild(hint);
+  let sx=0, sy=0, on=false, dx=0;
+  document.addEventListener('touchstart', e=>{
+    const t = e.touches && e.touches[0]; on = false;
+    if(!t || e.touches.length>1 || t.clientX > EDGE_PX) return;
+    on = true; sx=t.clientX; sy=t.clientY; dx=0;
+  }, {passive:true});
+  document.addEventListener('touchmove', e=>{
+    if(!on) return; const t = e.touches[0]; dx = t.clientX-sx; const dy = t.clientY-sy;
+    if(Math.abs(dy) > 40 && Math.abs(dy) > dx){ on=false; hint.classList.remove('show','ready'); hint.style.transform=''; return; }
+    if(dx>8){ hint.classList.add('show'); hint.style.transform = `translate(${Math.min(dx,110)*0.6-44}px, ${t.clientY-26}px)`; hint.classList.toggle('ready', dx>80); }
+  }, {passive:true});
+  const end = ()=>{
+    if(!on) return; on=false;
+    const go = dx>80; hint.classList.remove('show','ready'); hint.style.transform='';
+    if(go && navBack() && typeof haptic==='function') try{ haptic('light'); }catch(e){}
+  };
+  document.addEventListener('touchend', end, {passive:true});
+  document.addEventListener('touchcancel', ()=>{ on=false; hint.classList.remove('show','ready'); hint.style.transform=''; }, {passive:true});
+})();
+
 initSync();
 </script>
 </body>
