@@ -1337,6 +1337,18 @@ body.privacy .dn-amt{display:none;} body.privacy .dn-mask{display:inline;}
 .lc-n .lc-s{margin-top:1px;}
 .alloccard .lp-dot{margin-top:5px;}
 .alloc-note{margin-top:12px; padding-top:10px; border-top:1px solid var(--hair); font-size:12.5px; color:var(--ink2);}
+/* órdenes */
+.trlist{padding:2px 16px;}
+.trrow{border-bottom:1px solid var(--hair);} .trrow:last-child{border-bottom:none;}
+.tr-main{display:flex; align-items:center; gap:12px; width:100%; padding:12px 0; background:none; border:none; color:var(--ink); text-align:left;}
+.tr-ic{width:32px; height:32px; flex:none; border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:700; background:var(--card2);}
+.tr-ic.buy{color:var(--sage);} .tr-ic.sell{color:var(--clay);}
+.tr-i{flex:1; min-width:0; display:flex; flex-direction:column;}
+.tr-n{font-size:15px; font-weight:600;} .tr-s{font-size:12.5px; color:var(--ink3); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.tr-a{font-size:14px; font-weight:600; color:var(--ink2);}
+.tr-edit{padding:0 0 14px;}
+.tr-edit .payrow input{min-height:44px; border-radius:var(--r-sm); border:1px solid var(--hair); background:var(--card2); color:var(--ink); padding:0 12px; font-size:16px; width:100%; min-width:0;}
+.tr-edit .row2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
 </style>
 </head>
 <body>
@@ -1755,6 +1767,7 @@ function normalizeState(s){
   if(!Array.isArray(s.limitScopes)) s.limitScopes = Object.keys(s.budgets).filter(k=>Number(s.budgets[k])>0);
   if(!Array.isArray(s.categories) || !s.categories.length) s.categories = DEFAULT_CATS.map(c=>({...c}));
   if(!Array.isArray(s.portfolios)) s.portfolios = [];
+  if(!Array.isArray(s.trades)) s.trades = [];
   s.items.forEach(i=>{ if(i.cat==='prestamos') i.cat='medeben'; });
   if(s.categories.some(c=>c.id==='prestamos')){
     s.categories = s.categories.filter(c=>c.id!=='prestamos');
@@ -2423,6 +2436,9 @@ function openTransferTo(toId, amount){
 }
 function openEditMovement(kind, id){
   const rec = listFor(kind).find(r=>r.id===id); if(!rec) return;
+  const tr = rec.tradeId && (state.trades||[]).find(t=>t.id===rec.tradeId);
+  if(tr){ tradeEdit = tr.id; openPf[tr.cat] = tr.pid; goToTab('cartera', tr.cat); renderInvestPage(tr.cat);
+    setTimeout(()=>{ const el = document.getElementById('tq_'+tr.id); if(el) try{ el.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){} }, 120); return; }
   editing = {kind, id};
   resetSheetFields();
   document.getElementById('sheetAmount').value = amtStr(rec.amount); sizeAmt();
@@ -2549,6 +2565,7 @@ function submitExpense(){
 }
 function deleteMovement(kind, id){
   const arr = listFor(kind); const rec = arr.find(r=>r.id===id); if(!rec) return;
+  if(rec.tradeId && (state.trades||[]).some(t=>t.id===rec.tradeId)){ deleteTrade(rec.tradeId); return; }
   applyMove(kind, rec, -1);
   arr.splice(arr.indexOf(rec),1);
   save(); renderAll();
@@ -3340,6 +3357,7 @@ function pfDetailHtml(cat, p){
     html += `<div class="pf-bar big">${list.map(i=>`<i style="width:${Math.max(1.5,dispVal(i,cat)/tot*100)}%;background:${monoColor(i.symbol||i.name)}" title="${esc(i.symbol||i.name)}"></i>`).join('')}</div>`;
   }
   html += `<div class="group-title">Posiciones</div>` + (list.length ? list.map(it=>posRowHtml(cat,it)).join('') : `<div class="pfempty">Todavía no hay posiciones en esta cartera.</div>`);
+  html += tradesHtml(cat, p.id);
   // añadir
   html += `<div class="group-title">Añadir posición</div><div class="card addpos">`;
   if(cat==='bolsa'){
@@ -3470,6 +3488,7 @@ function linkQuote(id){
   searchFor('bolsa', q);
 }
 const tradeMode = {};
+function setTradeMode(cat, id, m){ tradeMode[id] = m; renderInvestPage(cat); }
 /* Crypto: las monedas se compran con USDT; el USDT se compra desde el banco */
 function usdtPositions(){ return state.items.filter(i=>i.cat==='crypto' && String(i.symbol||i.name).toUpperCase()==='USDT'); }
 function usdtUnits(u){ return u.live && u.qty>0 ? u.qty : toUSD(u); }
@@ -3500,48 +3519,190 @@ function cryptoCostHint(kind, id){
   const usd = q*px;
   el.textContent = acc.startsWith('usdt:') ? `Se restarán ${fmtNum(usd)} USDT.` : acc ? `Se descontarán ≈ ${EUR_2.format(usd*fxRate())} del banco.` : '';
 }
-// comprueba y descuenta USDT; devuelve un mensaje de error o '' si ha ido bien
-function payWithUsdt(usdtId, usd, target, qty){
-  const u = state.items.find(i=>i.id===usdtId); if(!u) return 'Ese USDT ya no existe.';
-  const px = u.lastPrice>0 ? u.lastPrice : 1, units = round8(usd/px);
-  if(units > usdtUnits(u) + 1e-6) return `No tienes suficiente USDT: necesitas ${fmtNum(units)} y tienes ${fmtNum(usdtUnits(u))}.`;
-  if(!target) return '';
-  if(u.live && u.qty>0){ u.qty = round8(u.qty - units); u.amount = px*u.qty; } else u.amount = round2(Number(u.amount||0) - usd);
-  if((u.live ? u.qty : u.amount) <= 1e-8) state.items = state.items.filter(i=>i.id!==u.id);
-  const rec = {id:uid(), ts:Date.now(), amount:round2(usd*fxRate()), fromId:u.id, fromName:invLabel(u.portfolioId,'USDT'), invFrom:true,
-    toId:target.id, toName:invLabel(target.portfolioId, target.symbol), invTo:true, note:`Compra de ${fmtNum(qty)} ${target.symbol} con USDT`, date:todayStr()};
-  state.transfers.push(rec);
+/* ================= Órdenes de compra y venta (se pueden editar y borrar) =================
+   Cada orden guarda exactamente lo que cambió (posiciones, USDT, cuentas y su movimiento)
+   para poder deshacerla o editarla más tarde sin descuadrar nada. */
+function livePos(pid, sym){ return state.items.find(i=>i.portfolioId===pid && i.live && i.symbol===sym); }
+function refreshPosAmount(cat, pos){
+  if(cat==='crypto'){ if(!(pos.lastPrice>0) && STABLES.includes(pos.symbol)) pos.lastPrice = 1; if(pos.lastPrice>0) pos.amount = pos.lastPrice*pos.qty; }
+  else recalcStock(pos);
+}
+function posDelta(cat, pid, sym, dq, price, meta){
+  const pos0 = livePos(pid, sym);
+  if(dq>0){
+    const eff = {k:'pos', cat, pid, sym, dq, avgBefore: pos0 ? (pos0.avgCost ?? null) : null, created: !pos0};
+    investBuy(cat, pid, {symbol:sym, qty:dq, price: price>0?price:0, name:meta&&meta.name, qcur:meta&&meta.qcur});
+    return eff;
+  }
+  const eff = {k:'pos', cat, pid, sym, dq};
+  pos0.qty = round8(pos0.qty + dq);
+  if(pos0.qty <= 1e-8){ eff.snap = JSON.parse(JSON.stringify(Object.assign({}, pos0, {qty:-dq}))); state.items = state.items.filter(i=>i.id!==pos0.id); }
+  else refreshPosAmount(cat, pos0);
+  return eff;
+}
+function undoPosDelta(e){
+  const pos = livePos(e.pid, e.sym);
+  if(e.dq>0){
+    if(!pos) return;
+    pos.qty = round8(pos.qty - e.dq);
+    if(pos.qty <= 1e-8){ state.items = state.items.filter(i=>i.id!==pos.id); return; }
+    if(!e.created) pos.avgCost = e.avgBefore;
+    refreshPosAmount(e.cat, pos);
+  } else {
+    if(pos){ pos.qty = round8(pos.qty - e.dq); refreshPosAmount(e.cat, pos); }
+    else if(e.snap){ const p = Object.assign({}, e.snap, {qty:-e.dq}); if(!state.items.some(i=>i.id===p.id)) state.items.push(p); else p.id = uid(), state.items.push(p); refreshPosAmount(e.cat, p); }
+    else investBuy(e.cat, e.pid, {symbol:e.sym, qty:-e.dq, price:0});
+  }
+}
+function tradeCur(t){ return t.cat==='crypto' ? 'USD' : (t.qcur||'EUR'); }
+function tradeToEur(t, usdOrCur){ return t.cat==='crypto' ? usdOrCur*fxRate() : usdOrCur*curToEur(t.qcur); }
+// aplica una orden; devuelve {effects} o {error}
+function applyTrade(t){
+  const {cat, pid, sym, side, qty, price, pay} = t;
+  if(!(qty>0)) return {error:'Indica la cantidad.'};
+  const isCrypto = cat==='crypto', isStable = sym==='USDT';
+  const total = qty*(price>0?price:0);
+  const effects = []; let accId = null, accEur = 0, note = '';
+  if(side==='buy'){
+    if(isCrypto && !isStable && pay){
+      if(!pay.startsWith('usdt:')) return {error:'Las criptomonedas se compran con USDT: elige tu USDT.'};
+      if(!(price>0)) return {error:'Indica el precio para saber cuánto USDT se resta.'};
+      const u = state.items.find(i=>i.id===pay.slice(5));
+      if(!u || !u.live) return {error:'Ese USDT ya no existe.'};
+      const units = round8(total/(u.lastPrice>0?u.lastPrice:1));
+      if(units > u.qty + 1e-6) return {error:`No tienes suficiente USDT: necesitas ${fmtNum(units)} y tienes ${fmtNum(u.qty)}.`};
+      effects.push(posDelta(cat, pid, sym, qty, price, t));
+      effects.push(posDelta('crypto', u.portfolioId, 'USDT', -units, 1));
+      note = `Compra de ${fmtNum(qty)} ${sym} con USDT`;
+    } else {
+      if(pay && pay.startsWith('usdt:')) return {error:'El USDT se compra desde tu banco: elige la cuenta.'};
+      if(pay && !(price>0)) return {error:'Indica el precio de compra para descontarlo de la cuenta.'};
+      if(pay && !state.items.find(i=>i.id===pay)) return {error:'Esa cuenta ya no existe.'};
+      effects.push(posDelta(cat, pid, sym, qty, price>0?price:(isStable?1:0), t));
+      if(pay){ accId = pay; accEur = -round2(tradeToEur(t, total)); }
+      note = `Compra de ${fmtNum(qty)} ${sym}`;
+    }
+  } else {
+    const pos = livePos(pid, sym);
+    if(!pos) return {error:'Esa posición ya no existe.'};
+    if(qty > pos.qty + 1e-9) return {error:`Indica una cantidad entre 0 y ${fmtNum(pos.qty)}.`};
+    if(isCrypto && !isStable){
+      if(!(price>0)) return {error:'Indica el precio de venta.'};
+      effects.push(posDelta(cat, pid, sym, -qty, price));
+      effects.push(posDelta('crypto', pid, 'USDT', round8(total), 1));
+      note = `Venta de ${fmtNum(qty)} ${sym} a USDT`;
+    } else {
+      if(isCrypto && !pay) return {error:'Elige la cuenta donde entra el dinero.'};
+      if(pay && !(price>0)) return {error:'Indica el precio de venta para ingresar el dinero en la cuenta.'};
+      if(pay && !state.items.find(i=>i.id===pay)) return {error:'Esa cuenta ya no existe.'};
+      effects.push(posDelta(cat, pid, sym, -qty, price));
+      if(pay){ accId = pay; accEur = round2(tradeToEur(t, total)); }
+      note = `Venta de ${fmtNum(qty)} ${sym}`;
+    }
+  }
+  if(accId){ adjustItem(accId, accEur); effects.push({k:'acc', id:accId, eur:accEur}); }
+  // movimiento visible en Gastos › Movimientos, enlazado a la orden
+  if(accId || (isCrypto && !isStable && (pay || side==='sell'))){
+    const lbl = invLabel(pid, sym), usdtLbl = invLabel(pid, 'USDT');
+    const eur = accId ? Math.abs(accEur) : round2(tradeToEur(t, total));
+    const rec = side==='buy'
+      ? {id:uid(), ts:Date.now(), amount:eur, fromId: accId || 'usdt', fromName: accId ? undefined : usdtLbl, invFrom: !accId, toId:'pos', toName:lbl, invTo:true, note, date:t.date, tradeId:t.id}
+      : {id:uid(), ts:Date.now(), amount:eur, fromId:'pos', fromName:lbl, invFrom:true, toId: accId || 'usdt', toName: accId ? undefined : usdtLbl, invTo: !accId, note, date:t.date, tradeId:t.id};
+    state.transfers.push(rec); effects.push({k:'tr', id:rec.id});
+  }
+  return {effects};
+}
+function revertTrade(t){
+  (t.effects||[]).slice().reverse().forEach(e=>{
+    if(e.k==='pos') undoPosDelta(e);
+    else if(e.k==='acc'){ if(state.items.find(i=>i.id===e.id)) adjustItem(e.id, -e.eur); }
+    else if(e.k==='tr') state.transfers = state.transfers.filter(r=>r.id!==e.id);
+  });
+  t.effects = [];
+}
+function recordTrade(o){
+  const t = Object.assign({id:uid(), ts:Date.now(), date:todayStr()}, o);
+  const r = applyTrade(t); if(r.error) return r.error;
+  t.effects = r.effects; state.trades = state.trades || []; state.trades.push(t);
   return '';
 }
-// compra en Crypto aplicando la regla de pago; devuelve '' o un error
-function cryptoBuy(pid, sym, qty, price, acc, allowNone){
-  sym = String(sym).toUpperCase();
-  if(sym==='USDT'){
-    if(!acc && allowNone){ investBuy('crypto', pid, {symbol:sym, qty, price}); return ''; }
-    if(!acc || acc.startsWith('usdt:')) return 'El USDT se compra desde tu banco: elige la cuenta.';
-    investBuy('crypto', pid, {symbol:sym, qty, price: price>0?price:1, accId:acc}); return '';
+// rehace la historia desde la orden idx: deshace esa y las posteriores, aplica el cambio y las vuelve a aplicar en orden
+function replayTrades(idx, mutate){
+  const later = state.trades.slice(idx);
+  later.slice().reverse().forEach(revertTrade);
+  const backup = later.map(t=>Object.assign({}, t, {effects:[]}));
+  const next = mutate(later.map(t=>Object.assign({}, t, {effects:[]})));
+  const done = [];
+  for(const t of next){
+    const r = applyTrade(t);
+    if(r.error){
+      done.slice().reverse().forEach(revertTrade);
+      backup.forEach(t2=>{ const r2 = applyTrade(t2); t2.effects = r2.effects || []; });
+      state.trades = state.trades.slice(0, idx).concat(backup);
+      const who = t.id===backup[0].id ? '' : ` (choca con una orden posterior: ${t.side==='buy'?'compra':'venta'} de ${fmtNum(t.qty)} ${t.sym} del ${fmtDay(t.date)})`;
+      return r.error + who;
+    }
+    t.effects = r.effects; done.push(t);
   }
-  if(!acc && allowNone){ investBuy('crypto', pid, {symbol:sym, qty, price}); return ''; }
-  if(!acc.startsWith('usdt:')) return 'Las criptomonedas se compran con USDT: elige tu USDT.';
-  if(!(price>0)) return 'Indica el precio para saber cuánto USDT se resta.';
-  const usdtId = acc.slice(5), check = payWithUsdt(usdtId, qty*price, null);
-  if(check) return check;
-  const pos = investBuy('crypto', pid, {symbol:sym, qty, price});
-  return payWithUsdt(usdtId, qty*price, pos, qty);
+  state.trades = state.trades.slice(0, idx).concat(next);
+  return '';
 }
-function setTradeMode(cat, id, m){ tradeMode[id] = m; renderInvestPage(cat); }
+function deleteTrade(id){
+  const idx = (state.trades||[]).findIndex(x=>x.id===id); if(idx<0) return;
+  const t = state.trades[idx];
+  if(!confirm(`¿Eliminar esta orden (${t.side==='buy'?'compra':'venta'} de ${fmtNum(t.qty)} ${t.sym})? Se deshará todo lo que cambió.`)) return;
+  const e = replayTrades(idx, list=>list.slice(1));
+  if(e){ alert('No se puede eliminar: '+e); save(); renderAll(); return; }
+  tradeEdit = null; save(); renderAll();
+}
+function saveTradeEdit(id){
+  const idx = (state.trades||[]).findIndex(x=>x.id===id); if(idx<0) return;
+  const q = numVal('tq_'+id), px = numVal('tp_'+id), d = strVal('td_'+id), err = document.getElementById('terr_'+id);
+  if(!(q>0)){ if(err) err.textContent='Indica la cantidad.'; return; }
+  const e = replayTrades(idx, list=>{ Object.assign(list[0], {qty:q, price: px>0?px:0, date: /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : list[0].date}); return list; });
+  if(e){ save(); renderAll(); tradeEdit = id; renderInvestPage(state.trades[idx].cat); const el = document.getElementById('terr_'+id); if(el) el.textContent = e; return; }
+  tradeEdit = null; save(); renderAll();
+}
+let tradeEdit = null;
+function toggleTradeEdit(cat, id){ tradeEdit = tradeEdit===id ? null : id; renderInvestPage(cat); }
+function tradePayLabel(t){
+  if(t.side==='buy'){
+    if(t.pay && t.pay.startsWith('usdt:')) return 'con USDT';
+    if(t.pay) return 'desde '+itemName(t.pay);
+    return 'sin descontar';
+  }
+  if(t.cat==='crypto' && t.sym!=='USDT') return 'a USDT';
+  return t.pay ? 'a '+itemName(t.pay) : 'sin ingresar';
+}
+function tradesHtml(cat, pid){
+  const list = (state.trades||[]).filter(t=>t.cat===cat && t.pid===pid).sort((a,b)=>(b.date||'').localeCompare(a.date||'') || b.ts-a.ts);
+  if(!list.length) return '';
+  return `<div class="group-title">Órdenes</div><div class="card trlist">${list.slice(0,40).map(t=>{
+    const cur = tradeCur(t), open = tradeEdit===t.id, buy = t.side==='buy';
+    return `<div class="trrow${open?' open':''}">
+      <button class="tr-main" onclick="toggleTradeEdit('${cat}','${t.id}')">
+        <span class="tr-ic ${buy?'buy':'sell'}">${buy?'↓':'↑'}</span>
+        <span class="tr-i"><span class="tr-n">${buy?'Compra':'Venta'} · ${fmtNum(t.qty)} ${esc(t.sym)}</span><span class="tr-s">${esc(fmtDay(t.date))}${t.price>0?' · a '+fmtPrice(t.price, cur):''} · ${esc(tradePayLabel(t))}</span></span>
+        <span class="tr-a mono">${t.price>0 ? (cat==='crypto'?USD_2:EUR_2).format(t.qty*t.price*(cat==='crypto'?1:curToEur(t.qcur))) : ''}</span>
+      </button>
+      ${open ? `<div class="tr-edit">
+        <div class="addrow2"><label>Cantidad<input type="number" step="any" inputmode="decimal" id="tq_${t.id}" value="${t.qty}"></label><label>Precio (${esc(cur==='GBX'?'peniques':cur)})<input type="number" step="any" inputmode="decimal" id="tp_${t.id}" value="${t.price||''}"></label></div>
+        <label class="payrow">Fecha<input type="date" id="td_${t.id}" value="${esc(t.date||'')}"></label>
+        <div class="pferr" id="terr_${t.id}"></div>
+        <div class="row2"><button class="btn btn-danger" onclick="deleteTrade('${t.id}')">Eliminar orden</button><button class="btn btn-pri" onclick="saveTradeEdit('${t.id}')">Guardar cambios</button></div>
+        <div class="hint" style="margin:8px 2px 0;">Al guardar o eliminar se recalculan la posición, el USDT y la cuenta.</div>
+      </div>` : ''}
+    </div>`; }).join('')}</div>`;
+}
+
 function buyPos(cat, id){
   const pos = state.items.find(i=>i.id===id); if(!pos) return;
   const q = numVal('buyq_'+id), px = numVal('buyp_'+id), acc = strVal('buya_'+id);
   const err = document.getElementById('buyerr_'+id);
   if(!(q>0)){ if(err) err.textContent = 'Indica cuántas has comprado.'; return; }
-  if(cat==='crypto'){
-    const e = cryptoBuy(pos.portfolioId, pos.symbol, q, px, acc, false);
-    if(e){ if(err) err.textContent = e; return; }
-    save(); renderAll(); return;
-  }
-  if(acc && !(px>0)){ if(err) err.textContent = 'Indica el precio de compra para descontar el dinero de la cuenta.'; return; }
-  investBuy(cat, pos.portfolioId, {symbol:pos.symbol, name:pos.displayName||pos.name, qcur:pos.qcur, qty:q, price:px>0?px:0, accId:acc});
+  if(cat==='crypto' && !acc){ if(err) err.textContent = pos.symbol==='USDT' ? 'El USDT se compra desde tu banco: elige la cuenta.' : 'Las criptomonedas se compran con USDT: elige tu USDT.'; return; }
+  const e = recordTrade({cat, pid:pos.portfolioId, sym:pos.symbol, side:'buy', qty:q, price:px>0?px:0, pay:acc, name:pos.displayName||pos.name, qcur:pos.qcur});
+  if(e){ if(err) err.textContent = e; return; }
   save(); renderAll();
 }
 function cryptoSellHint(id){
@@ -3551,30 +3712,11 @@ function cryptoSellHint(id){
   el.textContent = pos.symbol==='USDT' ? `Entrarán ≈ ${EUR_2.format(q*px*fxRate())} en el banco.` : `Recibirás ${fmtNum(q*px)} USDT.`;
 }
 function sellPos(cat, id){
-  if(cat==='crypto'){
-    const pos = state.items.find(i=>i.id===id); if(!pos) return;
-    const q = numVal('sellq_'+id), px0 = numVal('sellp_'+id), px = px0>0 ? px0 : pos.lastPrice;
-    const err = document.getElementById('sellerr_'+id);
-    if(!(q>0) || q > pos.qty + 1e-9){ if(err) err.textContent = `Indica una cantidad entre 0 y ${fmtNum(pos.qty)}.`; return; }
-    if(!(px>0)){ if(err) err.textContent = 'Indica el precio de venta.'; return; }
-    if(pos.symbol==='USDT'){
-      const acc = strVal('sella_'+id);
-      if(!acc){ if(err) err.textContent = 'Elige la cuenta donde entra el dinero.'; return; }
-      investSell(cat, pos, q, px, acc); save(); renderAll(); return;
-    }
-    const pid = pos.portfolioId, sym = pos.symbol, usd = q*px;
-    investSell(cat, pos, q, px, '');
-    const u = investBuy('crypto', pid, {symbol:'USDT', qty: round8(usd), price: 1});
-    state.transfers.push({id:uid(), ts:Date.now(), amount:round2(usd*fxRate()), fromId:id, fromName:invLabel(pid, sym), invFrom:true,
-      toId:u.id, toName:invLabel(pid,'USDT'), invTo:true, note:`Venta de ${fmtNum(q)} ${sym} a USDT`, date:todayStr()});
-    save(); renderAll(); return;
-  }
   const pos = state.items.find(i=>i.id===id); if(!pos) return;
-  const q = numVal('sellq_'+id), px = numVal('sellp_'+id), acc = strVal('sella_'+id);
+  const q = numVal('sellq_'+id), px0 = numVal('sellp_'+id), px = px0>0 ? px0 : (pos.lastPrice||0), acc = strVal('sella_'+id);
   const err = document.getElementById('sellerr_'+id);
-  if(!(q>0) || q > pos.qty + 1e-9){ if(err) err.textContent = `Indica una cantidad entre 0 y ${fmtNum(pos.qty)}.`; return; }
-  if(acc && !(px>0 || pos.lastPrice>0)){ if(err) err.textContent = 'Indica el precio de venta para ingresar el dinero en la cuenta.'; return; }
-  investSell(cat, pos, q, px, acc);
+  const e = recordTrade({cat, pid:pos.portfolioId, sym:pos.symbol, side:'sell', qty:q, price:px, pay:acc, name:pos.displayName||pos.name, qcur:pos.qcur});
+  if(e){ if(err) err.textContent = e; return; }
   save(); renderAll();
 }
 async function ensureFx(cur){
@@ -3624,7 +3766,7 @@ function addCryptoPos(){
   const qty = numVal('qty_crypto'), avg = numVal('avg_crypto'), acc = strVal('pay_crypto');
   const err = document.getElementById('addcerr');
   if(!sym || !(qty>0)){ if(err) err.textContent='Indica la criptomoneda y la cantidad.'; return; }
-  const e = cryptoBuy(p.id, sym, qty, avg, acc, true);
+  const e = recordTrade({cat:'crypto', pid:p.id, sym, side:'buy', qty, price:avg>0?avg:0, pay:acc});
   if(e){ if(err) err.textContent = e; return; }
   save(); renderAll(); refreshAllPrices(false);
 }
@@ -4605,7 +4747,7 @@ function makeUndoable(name, label, ms){
     return r;
   };
 }
-[['deleteMovement','Movimiento eliminado'],['removeItem', id=>{ const it=state.items.find(i=>i.id===id); return it && (it.cat==='bolsa'||it.cat==='crypto') ? 'Posición eliminada' : 'Cuenta eliminada'; }],['deletePortfolio','Cartera eliminada'],['payDebt',(id,a)=>{ const it=state.items.find(i=>i.id===id); return it && Number(a)>=Number(it.amount)-0.004 ? 'Deuda saldada 🎉' : 'Pago registrado'; }],['collectPart',(id,a)=>{ const it=state.items.find(i=>i.id===id); return it && Number(a)>=Number(it.amount)-0.004 ? 'Marcado como cobrado' : 'Cobro parcial registrado'; }],['sellPos','Venta registrada'],['buyPos','Compra registrada'],['deleteCustomScope','Ámbito eliminado'],
+[['deleteMovement','Movimiento eliminado'],['removeItem', id=>{ const it=state.items.find(i=>i.id===id); return it && (it.cat==='bolsa'||it.cat==='crypto') ? 'Posición eliminada' : 'Cuenta eliminada'; }],['deletePortfolio','Cartera eliminada'],['payDebt',(id,a)=>{ const it=state.items.find(i=>i.id===id); return it && Number(a)>=Number(it.amount)-0.004 ? 'Deuda saldada 🎉' : 'Pago registrado'; }],['collectPart',(id,a)=>{ const it=state.items.find(i=>i.id===id); return it && Number(a)>=Number(it.amount)-0.004 ? 'Marcado como cobrado' : 'Cobro parcial registrado'; }],['sellPos','Venta registrada'],['buyPos','Compra registrada'],['deleteTrade','Orden eliminada'],['saveTradeEdit','Orden actualizada'],['deleteCustomScope','Ámbito eliminado'],
  ['deleteRecurring','Recurrente eliminado'],['deleteSavingsGoal','Meta de ahorro eliminada'],['deleteSnapshot','Foto de patrimonio eliminada'],
  ['collectDebt','Marcado como cobrado'],['resetAll','Todos los datos borrados',10000]].forEach(([n,l,ms])=>makeUndoable(n,l,ms));
 
