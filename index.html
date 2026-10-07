@@ -1329,6 +1329,13 @@ body.privacy .dn-amt{display:none;} body.privacy .dn-mask{display:inline;}
 .lc-li{display:flex; align-items:center; gap:8px; font-size:13.5px;}
 .lc-n{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;} .lc-p{color:var(--ink2); font-weight:600;}
 .ow-pen{border:none; background:none; color:var(--ink3); font-size:14px; padding:2px 4px; margin-left:2px; vertical-align:1px;}
+/* asignación */
+.alloccard .lc-li{align-items:flex-start;}
+.alloccard .lc-n{white-space:normal;}
+.lc-s{display:block; font-size:12px; color:var(--ink3); font-weight:500;}
+.lc-n .lc-s{margin-top:1px;}
+.alloccard .lp-dot{margin-top:5px;}
+.alloc-note{margin-top:12px; padding-top:10px; border-top:1px solid var(--hair); font-size:12.5px; color:var(--ink2);}
 </style>
 </head>
 <body>
@@ -3201,6 +3208,30 @@ function renderInvestPage(cat){
   if(openPf[cat] && !open) openPf[cat]=null;
   root.innerHTML = open ? pfDetailHtml(cat, open) : pfOverviewHtml(cat, pfs);
 }
+const ALLOC_COLORS = ['var(--dusty)','var(--clay)','var(--sage)','var(--mauve)','var(--gold)','var(--teal)','var(--rust)'];
+function allocChartHtml(cat, items){
+  const groups = {};
+  items.forEach(it=>{
+    const v = dispVal(it, cat); if(!(v>0)) return;
+    const key = (it.symbol || it.displayName || it.name || '?').toUpperCase();
+    const label = cat==='crypto' ? (it.symbol || it.name) : (it.displayName || it.name || it.symbol);
+    (groups[key] = groups[key] || {label, sym: it.symbol||'', v:0}).v += v;
+  });
+  let list = Object.values(groups).sort((a,b)=>b.v-a.v);
+  if(!list.length) return '';
+  const total = list.reduce((a,x)=>a+x.v,0);
+  if(list.length > 7){ const rest = list.slice(6); list = list.slice(0,6).concat({label:'Otros', sym:'', v: rest.reduce((a,x)=>a+x.v,0), other:true, n:rest.length}); }
+  list.forEach((x,i)=>{ x.color = x.other ? 'var(--ink3)' : ALLOC_COLORS[i % ALLOC_COLORS.length]; });
+  const big = list[0], bigPct = big.v/total*100;
+  return `<div class="group-title">Asignación</div><div class="card limchart alloccard">
+    <div class="lc-body">
+      <svg class="lc-ring" viewBox="0 0 168 168" aria-hidden="true">${ringSvgParts(list.map(x=>({v:x.v, color:x.color})), {cx:84, cy:84, r:64, sw:16})}
+        <text x="84" y="82" text-anchor="middle" class="lc-amt mono">${list.length===1 && !big.other ? '100%' : Math.round(bigPct)+'%'}</text><text x="84" y="102" text-anchor="middle" class="lc-lbl">${esc(String(cat==='bolsa' && big.sym ? big.sym.split('.')[0] : big.label).slice(0,10))}</text></svg>
+      <div class="lc-legend">${list.map(x=>`<div class="lc-li"><span class="lp-dot" style="background:${x.color}"></span><span class="lc-n">${esc(x.label)}${x.other?` <span class="lc-cnt">(${x.n})</span>`:''}<span class="lc-s">${fmtD(x.v,cat)}</span></span><span class="lc-p mono">${pctLabel(x.v/total*100)}%</span></div>`).join('')}</div>
+    </div>
+    ${bigPct>=50 && list.length>1 ? `<div class="alloc-note">${esc(big.label)} es más de la mitad de tu ${cat==='crypto'?'crypto':'bolsa'}.</div>` : ''}
+  </div>`;
+}
 function pfOverviewHtml(cat, pfs){
   const all = state.items.filter(i=>i.cat===cat); const S = sumPf(all, cat);
   const c = state.categories.find(x=>x.id===cat) || {color:'var(--gold)', icon:'chart'};
@@ -3210,6 +3241,7 @@ function pfOverviewHtml(cat, pfs){
     <div class="cathero-amt mono">${fmtD(S.value,cat)}</div>
     <div class="cathero-sub">${pfs.length} ${pfs.length===1?'cartera':'carteras'} · ${nPos} ${nPos===1?'posición':'posiciones'}${cat==='crypto'?' · ≈ '+fmt(catTotal('crypto')):''}${S.gain!==null?' · '+(S.gain>=0?'+':'−')+fmtD(Math.abs(S.gain),cat):''}</div>
   </div>` + stockStatusHtml(cat);
+  html += allocChartHtml(cat, all);
   html += `<div class="group-title">Tus carteras</div>`;
   if(!pfs.length) html += `<div class="pfempty">Crea una cartera para cada bróker o estrategia (por ejemplo <b>${cat==='crypto'?'Binance':'XTB'}</b> o <b>Largo plazo</b>) y añade tus posiciones dentro.</div>`;
   html += pfs.map(p=>{
