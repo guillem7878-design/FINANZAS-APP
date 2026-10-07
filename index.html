@@ -1164,6 +1164,7 @@ button:focus-visible{outline:2px solid color-mix(in srgb, var(--accText) 60%, tr
 .payrow select, .addrow2 select{min-height:44px; border-radius:var(--r-sm); border:1px solid var(--hair); background:var(--card2); color:var(--ink); padding:0 10px;}
 .sellbox{border-top:1px solid var(--hair); padding-top:12px; margin-top:4px;}
 .tradesel{margin-bottom:12px;}
+.sell-to{display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; color:var(--ink2); background:var(--card2); border-radius:var(--r-sm); padding:12px 14px; margin:0 0 12px;}
 .sb-t{font-size:13.5px; font-weight:700; margin-bottom:10px;}
 
 /* ================= v14 · QA en móvil real ================= */
@@ -3314,8 +3315,11 @@ function posRowHtml(cat, it){
         ${cat==='crypto' ? `<div class="fut-note" id="buycost_${it.id}"></div>` : ''}
         <div class="pferr" id="buyerr_${it.id}"></div>
         <button class="btn btn-pri btn-block" onclick="buyPos('${cat}','${it.id}')">Registrar compra</button>`
-        : `<div class="addrow2"><label>Cantidad<input type="number" step="any" inputmode="decimal" id="sellq_${it.id}" placeholder="máx. ${fmtNum(it.qty)}"></label><label>Precio (${pl})<input type="number" step="any" inputmode="decimal" id="sellp_${it.id}" value="${it.lastPrice>0?it.lastPrice:''}"></label></div>
-        <label class="payrow">Ingresar en<select id="sella_${it.id}">${payOptionsHtml('No ingresar en ninguna cuenta')}</select></label>
+        : `<div class="addrow2"><label>Cantidad<input type="number" step="any" inputmode="decimal" id="sellq_${it.id}" placeholder="máx. ${fmtNum(it.qty)}" oninput="cryptoSellHint('${it.id}')"></label><label>Precio (${pl})<input type="number" step="any" inputmode="decimal" id="sellp_${it.id}" value="${it.lastPrice>0?it.lastPrice:(sym==='USDT'?1:'')}" oninput="cryptoSellHint('${it.id}')"></label></div>
+        ${cat!=='crypto' ? `<label class="payrow">Ingresar en<select id="sella_${it.id}">${payOptionsHtml('No ingresar en ninguna cuenta')}</select></label>`
+          : sym==='USDT' ? `<label class="payrow">Ingresar en<select id="sella_${it.id}" onchange="cryptoSellHint('${it.id}')">${cryptoPayOptionsHtml('USDT', it.portfolioId)}</select></label>`
+          : `<div class="sell-to"><span class="lp-dot" style="background:var(--teal)"></span>El dinero va a tu USDT de esta cartera</div>`}
+        ${cat==='crypto' ? `<div class="fut-note" id="sellcost_${it.id}"></div>` : ''}
         <div class="pferr" id="sellerr_${it.id}"></div>
         <button class="btn btn-sec btn-block" onclick="sellPos('${cat}','${it.id}')">Registrar venta</button>`}</div>`; })() : ''}
       <div class="pos-actions">${cat==='bolsa' && !it.live ? `<button class="btn btn-sec" onclick="linkQuote('${it.id}')">Vincular a su cotización</button>` : ''}${cat==='bolsa'&&it.live&&(it.priceErr||it.needsCheck)?`<button class="btn btn-sec" onclick="searchFor('${cat}','${esc(String(it.symbol).split('.')[0])}')">Buscar el valor correcto</button>`:''}<button class="btn btn-danger" onclick="removeItem('${it.id}')">Eliminar posición</button></div>
@@ -3540,7 +3544,31 @@ function buyPos(cat, id){
   investBuy(cat, pos.portfolioId, {symbol:pos.symbol, name:pos.displayName||pos.name, qcur:pos.qcur, qty:q, price:px>0?px:0, accId:acc});
   save(); renderAll();
 }
+function cryptoSellHint(id){
+  const el = document.getElementById('sellcost_'+id); if(!el) return;
+  const pos = state.items.find(i=>i.id===id); const q = numVal('sellq_'+id), px = numVal('sellp_'+id);
+  if(!pos || !(q>0 && px>0)){ el.textContent=''; return; }
+  el.textContent = pos.symbol==='USDT' ? `Entrarán ≈ ${EUR_2.format(q*px*fxRate())} en el banco.` : `Recibirás ${fmtNum(q*px)} USDT.`;
+}
 function sellPos(cat, id){
+  if(cat==='crypto'){
+    const pos = state.items.find(i=>i.id===id); if(!pos) return;
+    const q = numVal('sellq_'+id), px0 = numVal('sellp_'+id), px = px0>0 ? px0 : pos.lastPrice;
+    const err = document.getElementById('sellerr_'+id);
+    if(!(q>0) || q > pos.qty + 1e-9){ if(err) err.textContent = `Indica una cantidad entre 0 y ${fmtNum(pos.qty)}.`; return; }
+    if(!(px>0)){ if(err) err.textContent = 'Indica el precio de venta.'; return; }
+    if(pos.symbol==='USDT'){
+      const acc = strVal('sella_'+id);
+      if(!acc){ if(err) err.textContent = 'Elige la cuenta donde entra el dinero.'; return; }
+      investSell(cat, pos, q, px, acc); save(); renderAll(); return;
+    }
+    const pid = pos.portfolioId, sym = pos.symbol, usd = q*px;
+    investSell(cat, pos, q, px, '');
+    const u = investBuy('crypto', pid, {symbol:'USDT', qty: round8(usd), price: 1});
+    state.transfers.push({id:uid(), ts:Date.now(), amount:round2(usd*fxRate()), fromId:id, fromName:invLabel(pid, sym), invFrom:true,
+      toId:u.id, toName:invLabel(pid,'USDT'), invTo:true, note:`Venta de ${fmtNum(q)} ${sym} a USDT`, date:todayStr()});
+    save(); renderAll(); return;
+  }
   const pos = state.items.find(i=>i.id===id); if(!pos) return;
   const q = numVal('sellq_'+id), px = numVal('sellp_'+id), acc = strVal('sella_'+id);
   const err = document.getElementById('sellerr_'+id);
