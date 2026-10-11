@@ -73,21 +73,55 @@ async function usdTo(cur){
   }
   return fxCache.rates[cur];
 }
+// Precio de una criptomoneda: Crypto.com y, si no la tiene, Binance y después CoinGecko.
+// Devuelve {last, change} con change en fracción (0.05 = +5 %), como Crypto.com.
+async function cryptoComTicker(inst){
+  const j = await getJSON('https://api.crypto.com/exchange/v1/public/get-tickers?instrument_name='+encodeURIComponent(inst));
+  const d = j && j.result && j.result.data && j.result.data[0];
+  if(!d || !(Number(d.a)>0)) throw new Error('not_found');
+  return {last: Number(d.a), change: Number(d.c)};
+}
+async function binanceTicker(base){
+  for(const host of ['https://data-api.binance.vision', 'https://api.binance.com']){
+    for(const q of ['USDT','USDC','FDUSD']){
+      try{
+        const j = await getJSON(host+'/api/v3/ticker/24hr?symbol='+encodeURIComponent(base+q));
+        if(j && Number(j.lastPrice)>0) return {last: Number(j.lastPrice), change: Number(j.priceChangePercent)/100};
+      }catch(e){ if(e && !e.status) break; }   // sin conexión con este servidor: probar el siguiente
+    }
+  }
+  throw new Error('not_found');
+}
+async function geckoTicker(base){
+  const KEY = 'finzz_cg_ids';
+  let ids = {}; try{ ids = JSON.parse(lsGet(KEY)||'{}'); }catch(e){}
+  let id = ids[base];
+  if(!id){
+    const j = await getJSON('https://api.coingecko.com/api/v3/search?query='+encodeURIComponent(base));
+    const c = ((j && j.coins) || []).filter(x=>String(x.symbol).toUpperCase()===base)
+      .sort((a,b)=>(a.market_cap_rank||1e9)-(b.market_cap_rank||1e9))[0];
+    if(!c) throw new Error('not_found');
+    id = c.id; ids[base] = id; lsSet(KEY, JSON.stringify(ids));
+  }
+  const p = await getJSON('https://api.coingecko.com/api/v3/simple/price?ids='+encodeURIComponent(id)+'&vs_currencies=usd&include_24hr_change=true');
+  const d = p && p[id];
+  if(!d || !(Number(d.usd)>0)) throw new Error('not_found');
+  return {last: Number(d.usd), change: Number(d.usd_24h_change||0)/100};
+}
+async function usdTicker(base){
+  try{ return await cryptoComTicker(base+'_USD'); }catch(e){}
+  try{ return await cryptoComTicker(base+'_USDT'); }catch(e){}
+  try{ return await binanceTicker(base); }catch(e){}
+  return await geckoTicker(base);
+}
 async function cryptoTicker(instrument){
   const [base, quote] = String(instrument).toUpperCase().split('_');
-  const tryOne = async inst => {
-    const j = await getJSON('https://api.crypto.com/exchange/v1/public/get-tickers?instrument_name='+encodeURIComponent(inst));
-    const d = j && j.result && j.result.data && j.result.data[0];
-    if(!d || !(Number(d.a)>0)) throw new Error('not_found');
-    return {last: Number(d.a), change: Number(d.c)};
-  };
-  try{ return await tryOne(instrument); }
+  if(!quote || quote==='USD' || quote==='USDT') return await usdTicker(base);
+  try{ return await cryptoComTicker(instrument); }
   catch(e){
     // Si no existe el par en otra moneda, se calcula desde USD con el tipo de cambio del BCE
-    if(quote && quote!=='USD' && quote!=='USDT'){
-      const usd = await tryOne(base+'_USD'); const r = await usdTo(quote);
-      if(r) return {last: usd.last*r, change: usd.change};
-    }
+    const usd = await usdTicker(base); const r = await usdTo(quote);
+    if(r) return {last: usd.last*r, change: usd.change};
     throw e;
   }
 }
@@ -346,7 +380,7 @@ function renderConnections(){
             <div class="hintx">Pídela gratis en <a href="https://www.alphavantage.co/support/#api-key" target="_blank" rel="noopener">alphavantage.co</a> (solo un email).</div>`}
   </div>
   <div class="nv-conn">
-    <div class="ch"><div><div class="n">Criptomonedas y divisas</div><div class="s">Crypto.com y Banco Central Europeo · sin clave</div></div><span class="pill ok">Activo</span></div>
+    <div class="ch"><div><div class="n">Criptomonedas y divisas</div><div class="s">Crypto.com, Binance, CoinGecko y Banco Central Europeo · sin clave</div></div><span class="pill ok">Activo</span></div>
   </div>`;
 }
 window.nvSaveKey = async function(){
